@@ -19,12 +19,13 @@ import {
 import { FiUpload, FiX, FiPlay } from 'react-icons/fi'
 import VideoTrimmer from './VideoTrimmer'
 
-const ClaimUpload = ({ onSubmit }) => {
+const ClaimUpload = ({ onSubmit, onLogout }) => {
   const [claimId, setClaimId] = useState('')
   const [notes, setNotes] = useState('')
   const [images, setImages] = useState([])
   const [videos, setVideos] = useState([])
   const [selectedVideo, setSelectedVideo] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const toast = useToast()
   const imageInputRef = useRef(null)
   const videoInputRef = useRef(null)
@@ -53,6 +54,7 @@ const ClaimUpload = ({ onSubmit }) => {
     }))
 
     setImages([...images, ...newImages])
+    e.target.value = ''
   }
 
   const handleVideoUpload = (e) => {
@@ -72,12 +74,9 @@ const ClaimUpload = ({ onSubmit }) => {
     const newVideos = files.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
-      originalFile: file,
       name: file.name,
-      originalName: file.name,
       size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
       preview: URL.createObjectURL(file),
-      originalPreview: URL.createObjectURL(file),
       type: 'video',
       isTrimmed: false,
       trimStart: 0,
@@ -85,6 +84,7 @@ const ClaimUpload = ({ onSubmit }) => {
     }))
 
     setVideos([...videos, ...newVideos])
+    e.target.value = ''
   }
 
   const removeImage = (id) => {
@@ -95,147 +95,39 @@ const ClaimUpload = ({ onSubmit }) => {
 
   const removeVideo = (id) => {
     const vid = videos.find(v => v.id === id)
-    if (vid) {
-      URL.revokeObjectURL(vid.preview)
-      if (vid.originalPreview && vid.originalPreview !== vid.preview) {
-        URL.revokeObjectURL(vid.originalPreview)
-      }
-    }
+    if (vid) URL.revokeObjectURL(vid.preview)
     setVideos(videos.filter(v => v.id !== id))
   }
 
-  const trimVideoFile = async (videoFile, startTime, endTime, originalPreviewUrl) => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video')
-      video.preload = 'metadata'
-      
-      video.onloadedmetadata = async () => {
-        try {
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-          
-          canvas.width = video.videoWidth
-          canvas.height = video.videoHeight
-          
-          // Create MediaRecorder to record the trimmed portion
-          const stream = canvas.captureStream(30)
-          const mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'video/webm;codecs=vp9',
-            videoBitsPerSecond: 2500000
-          })
-          
-          const chunks = []
-          mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-              chunks.push(e.data)
-            }
-          }
-          
-          mediaRecorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' })
-            const trimmedFile = new File([blob], videoFile.name, { type: 'video/webm' })
-            const trimmedPreview = URL.createObjectURL(blob)
-            
-            resolve({
-              file: trimmedFile,
-              preview: trimmedPreview,
-              size: (blob.size / (1024 * 1024)).toFixed(2) + ' MB'
-            })
-          }
-          
-          mediaRecorder.onerror = (e) => {
-            reject(new Error('Recording failed: ' + e.error))
-          }
-          
-          // Start recording
-          mediaRecorder.start()
-          video.currentTime = startTime
-          
-          const drawFrame = () => {
-            if (video.currentTime >= endTime) {
-              mediaRecorder.stop()
-              video.pause()
-              return
-            }
-            
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-            requestAnimationFrame(drawFrame)
-          }
-          
-          video.onplay = () => {
-            drawFrame()
-          }
-          
-          video.play()
-          
-        } catch (error) {
-          reject(error)
+  const handleVideoTrim = (videoId, trimData) => {
+    const updatedVideos = videos.map(v => {
+      if (v.id === videoId) {
+        return {
+          ...v,
+          isTrimmed: true,
+          trimStart: trimData.trimStart,
+          trimEnd: trimData.trimEnd
         }
       }
-      
-      video.onerror = () => {
-        reject(new Error('Failed to load video'))
-      }
-      
-      video.src = originalPreviewUrl
+      return v
     })
-  }
-
-  const handleVideoTrim = async (videoId, trimData) => {
-    const videoToTrim = videos.find(v => v.id === videoId)
-    if (!videoToTrim) return
+    
+    setVideos(updatedVideos)
     
     toast({
-      title: 'Trimming video...',
-      description: 'Please wait while we process your video',
-      status: 'info',
+      title: 'Trim points saved',
+      description: 'Video will be trimmed during processing on server',
+      status: 'success',
       duration: 2000,
     })
-    
-    try {
-      // Trim the actual video file
-      const trimmedData = await trimVideoFile(
-        videoToTrim.originalFile,
-        trimData.trimStart,
-        trimData.trimEnd,
-        videoToTrim.originalPreview
-      )
-      
-      const updatedVideos = videos.map(v => {
-        if (v.id === videoId) {
-          // Clean up old preview if it was already trimmed
-          if (v.isTrimmed && v.preview !== v.originalPreview) {
-            URL.revokeObjectURL(v.preview)
-          }
-          
-          return {
-            ...v,
-            file: trimmedData.file,
-            name: v.originalName,
-            size: trimmedData.size,
-            preview: trimmedData.preview,
-            isTrimmed: true,
-            trimStart: trimData.trimStart,
-            trimEnd: trimData.trimEnd
-          }
-        }
-        return v
-      })
-      
-      setVideos(updatedVideos)
-      
-    } catch (error) {
-      console.error('Trimming error:', error)
-      toast({
-        title: 'Trimming failed',
-        description: error.message || 'Failed to trim video. Please try again.',
-        status: 'error',
-        duration: 5000,
-      })
-    }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) {
+      console.log('Already submitting, ignoring duplicate click')
+      return
+    }
+
     if (!claimId.trim()) {
       toast({
         title: 'Claim ID required',
@@ -256,19 +148,32 @@ const ClaimUpload = ({ onSubmit }) => {
       return
     }
 
-    const combinedResults = {
-      claimId,
-      notes,
-      uploadedImages: images,
-      uploadedVideos: videos,
-      processedAt: new Date().toISOString(),
-      totalFiles: images.length + videos.length,
-      imageCount: images.length,
-      videoCount: videos.length,
-      isProcessing: true
-    }
+    setIsSubmitting(true)
 
-    onSubmit(combinedResults)
+    try {
+      const combinedResults = {
+        claimId,
+        notes,
+        uploadedImages: images,
+        uploadedVideos: videos,
+        processedAt: new Date().toISOString(),
+        totalFiles: images.length + videos.length,
+        imageCount: images.length,
+        videoCount: videos.length,
+        isProcessing: true
+      }
+
+      await onSubmit(combinedResults)
+    } catch (error) {
+      console.error('Submission error:', error)
+      setIsSubmitting(false)
+      toast({
+        title: 'Submission failed',
+        description: error.message || 'Failed to submit claim',
+        status: 'error',
+        duration: 5000,
+      })
+    }
   }
 
   return (
@@ -290,6 +195,14 @@ const ClaimUpload = ({ onSubmit }) => {
                 Automated image & video authenticity analysis
               </Text>
             </Box>
+            <Button 
+              colorScheme="red" 
+              variant="outline" 
+              size="sm"
+              onClick={onLogout}
+            >
+              Logout
+            </Button>
           </Flex>
         </Container>
       </Box>
@@ -308,6 +221,7 @@ const ClaimUpload = ({ onSubmit }) => {
                 onChange={(e) => setClaimId(e.target.value)}
                 placeholder="e.g., CLM-2026-12345"
                 size={{ base: "md", md: "lg" }}
+                isDisabled={isSubmitting}
               />
             </Box>
 
@@ -327,9 +241,10 @@ const ClaimUpload = ({ onSubmit }) => {
                   borderRadius="lg"
                   p={{ base: 6, md: 8 }}
                   textAlign="center"
-                  cursor="pointer"
-                  _hover={{ borderColor: 'gray.400', bg: 'gray.50' }}
-                  onClick={() => imageInputRef.current?.click()}
+                  cursor={isSubmitting ? 'not-allowed' : 'pointer'}
+                  opacity={isSubmitting ? 0.5 : 1}
+                  _hover={!isSubmitting ? { borderColor: 'gray.400', bg: 'gray.50' } : {}}
+                  onClick={() => !isSubmitting && imageInputRef.current?.click()}
                 >
                   <Icon as={FiUpload} boxSize={{ base: 8, md: 10 }} color="gray.400" mb={3} />
                   <Text fontSize={{ base: "xs", md: "sm" }} color="gray.600" mb={1}>
@@ -345,6 +260,7 @@ const ClaimUpload = ({ onSubmit }) => {
                     accept="image/*"
                     onChange={handleImageUpload}
                     display="none"
+                    disabled={isSubmitting}
                   />
                 </Box>
               )}
@@ -383,6 +299,7 @@ const ClaimUpload = ({ onSubmit }) => {
                         colorScheme="red"
                         variant="ghost"
                         onClick={() => removeImage(img.id)}
+                        isDisabled={isSubmitting}
                       />
                     </Flex>
                   ))}
@@ -406,16 +323,17 @@ const ClaimUpload = ({ onSubmit }) => {
                   borderRadius="lg"
                   p={{ base: 6, md: 8 }}
                   textAlign="center"
-                  cursor="pointer"
-                  _hover={{ borderColor: 'gray.400', bg: 'gray.50' }}
-                  onClick={() => videoInputRef.current?.click()}
+                  cursor={isSubmitting ? 'not-allowed' : 'pointer'}
+                  opacity={isSubmitting ? 0.5 : 1}
+                  _hover={!isSubmitting ? { borderColor: 'gray.400', bg: 'gray.50' } : {}}
+                  onClick={() => !isSubmitting && videoInputRef.current?.click()}
                 >
                   <Icon as={FiUpload} boxSize={{ base: 8, md: 10 }} color="gray.400" mb={3} />
                   <Text fontSize={{ base: "xs", md: "sm" }} color="gray.600" mb={1}>
                     Click to upload videos
                   </Text>
                   <Text fontSize="xs" color="gray.500">
-                    MP4, MOV up to 50MB each (max 2 videos)
+                    MP4, MOV up to 10MB each (max 2 videos)
                   </Text>
                   <Input
                     ref={videoInputRef}
@@ -424,6 +342,7 @@ const ClaimUpload = ({ onSubmit }) => {
                     accept="video/*"
                     onChange={handleVideoUpload}
                     display="none"
+                    disabled={isSubmitting}
                   />
                 </Box>
               )}
@@ -445,12 +364,13 @@ const ClaimUpload = ({ onSubmit }) => {
                       <HStack
                         spacing={{ base: 2, md: 3 }}
                         flex={1}
-                        cursor="pointer"
-                        onClick={() => setSelectedVideo(vid)}
-                        _hover={{ bg: 'gray.100' }}
+                        cursor={isSubmitting ? 'not-allowed' : 'pointer'}
+                        onClick={() => !isSubmitting && setSelectedVideo(vid)}
+                        _hover={!isSubmitting ? { bg: 'gray.100' } : {}}
                         p={{ base: 2, md: 3 }}
                         m={{ base: -2, md: -3 }}
                         borderRadius="md"
+                        opacity={isSubmitting ? 0.5 : 1}
                       >
                         <Flex
                           boxSize={{ base: "40px", md: "48px" }}
@@ -469,7 +389,7 @@ const ClaimUpload = ({ onSubmit }) => {
                             <Text fontSize="xs" color="gray.500">{vid.size}</Text>
                             {vid.isTrimmed && (
                               <Badge colorScheme="blue" fontSize="xs">
-                                Trimmed ({vid.trimStart.toFixed(1)}s - {vid.trimEnd.toFixed(1)}s)
+                                Will trim: {vid.trimStart.toFixed(1)}s - {vid.trimEnd.toFixed(1)}s
                               </Badge>
                             )}
                           </HStack>
@@ -481,6 +401,7 @@ const ClaimUpload = ({ onSubmit }) => {
                         colorScheme="red"
                         variant="ghost"
                         onClick={() => removeVideo(vid.id)}
+                        isDisabled={isSubmitting}
                       />
                     </Flex>
                   ))}
@@ -503,6 +424,7 @@ const ClaimUpload = ({ onSubmit }) => {
                 rows={3}
                 resize="none"
                 size={{ base: "sm", md: "md" }}
+                isDisabled={isSubmitting}
               />
             </Box>
 
@@ -511,7 +433,9 @@ const ClaimUpload = ({ onSubmit }) => {
               colorScheme="blue"
               size={{ base: "md", md: "lg" }}
               onClick={handleSubmit}
-              isDisabled={!claimId.trim() || (images.length === 0 && videos.length === 0)}
+              isDisabled={!claimId.trim() || (images.length === 0 && videos.length === 0) || isSubmitting}
+              isLoading={isSubmitting}
+              loadingText="Processing..."
               w={{ base: "full", md: "auto" }}
             >
               Analyze Claim
@@ -521,7 +445,7 @@ const ClaimUpload = ({ onSubmit }) => {
       </Container>
 
       {/* Video Trimmer Modal */}
-      {selectedVideo && (
+      {selectedVideo && !isSubmitting && (
         <VideoTrimmer
           video={selectedVideo}
           onClose={() => setSelectedVideo(null)}

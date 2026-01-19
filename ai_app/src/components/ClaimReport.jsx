@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { keyframes } from '@emotion/react'
 import {
   Box,
   Container,
@@ -22,64 +23,79 @@ import {
   Tab,
   TabPanel,
   Image,
-  CircularProgress,
-  CircularProgressLabel,
-  Grid
+  Grid,
+  Divider,
+  List,
+  ListItem,
+  ListIcon
 } from '@chakra-ui/react'
-import { FiCheckCircle, FiXCircle, FiImage, FiVideo, FiDownload, FiMonitor, FiCamera, FiClock } from 'react-icons/fi'
+import { FiCheckCircle, FiXCircle, FiImage, FiVideo, FiDownload, FiMonitor, FiCamera, FiClock, FiInfo } from 'react-icons/fi'
+
+// Sand clock animation
+const sandClockRotate = keyframes`
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+`
+
+const SandClockIcon = () => (
+  <Box
+    animation={`${sandClockRotate} 2s linear infinite`}
+    display="inline-block"
+  >
+    <Icon as={FiClock} boxSize={10} color="blue.500" />
+  </Box>
+)
 
 const ClaimReport = ({ data, onReset }) => {
   const toast = useToast()
   
-  // NEW: Processing state
   const [processingStatus, setProcessingStatus] = useState({})
   const [imageResults, setImageResults] = useState(null)
   const [videoResults, setVideoResults] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const hasProcessedRef = useRef(false)
 
-  // NEW: Start processing when component mounts
   useEffect(() => {
-    if (data && data.isProcessing) {
+    if (data && data.isProcessing && !hasProcessedRef.current) {
+      hasProcessedRef.current = true
       setIsProcessing(true)
       startProcessing()
-    } else if (data) {
-      // If data already has results, use them
+    } else if (data && !data.isProcessing) {
       setImageResults(data.imageResults)
       setVideoResults(data.videoResults)
       setIsProcessing(false)
     }
   }, [data])
 
-  // NEW: Processing function
   const startProcessing = async () => {
     const { uploadedImages, uploadedVideos } = data
 
-    // Initialize processing status for all files
     const initialStatus = {}
     if (uploadedImages) {
       uploadedImages.forEach(img => {
-        initialStatus[img.id] = { progress: 0, status: 'processing' }
+        initialStatus[img.id] = { status: 'processing' }
       })
     }
     if (uploadedVideos) {
       uploadedVideos.forEach(vid => {
-        initialStatus[vid.id] = { progress: 0, status: 'processing' }
+        initialStatus[vid.id] = { status: 'processing' }
       })
     }
     setProcessingStatus(initialStatus)
 
     try {
-      // Process images
+      const promises = []
+
       if (uploadedImages && uploadedImages.length > 0) {
-        const imgResults = await processImages(uploadedImages)
-        setImageResults(imgResults)
+        promises.push(processImages(uploadedImages))
       }
 
-      // Process videos
       if (uploadedVideos && uploadedVideos.length > 0) {
-        const vidResults = await processVideos(uploadedVideos)
-        setVideoResults(vidResults)
+        promises.push(processVideos(uploadedVideos))
       }
+
+      await Promise.all(promises)
 
       setIsProcessing(false)
     } catch (error) {
@@ -94,25 +110,10 @@ const ClaimReport = ({ data, onReset }) => {
     }
   }
 
-  // NEW: Process images function
   const processImages = async (images) => {
     const IMAGE_API_URL = 'http://localhost:5000'
     
-    // Simulate progress updates
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i]
-      setProcessingStatus(prev => ({
-        ...prev,
-        [img.id]: { progress: 33, status: 'processing' }
-      }))
-      await new Promise(resolve => setTimeout(resolve, 300))
-      
-      setProcessingStatus(prev => ({
-        ...prev,
-        [img.id]: { progress: 66, status: 'processing' }
-      }))
-      await new Promise(resolve => setTimeout(resolve, 300))
-    }
+    console.log(`=== Processing ${images.length} images in single batch ===`)
 
     try {
       const formData = new FormData()
@@ -123,8 +124,14 @@ const ClaimReport = ({ data, onReset }) => {
         formData.append('files', image.file)
       })
 
+      // GET JWT TOKEN FROM localStorage
+      const token = localStorage.getItem('authToken')
+
       const response = await fetch(`${IMAGE_API_URL}/api/analyze-claim`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`  // ADD JWT TOKEN HERE
+        },
         body: formData,
       })
 
@@ -132,56 +139,63 @@ const ClaimReport = ({ data, onReset }) => {
         throw new Error('Image verification failed')
       }
 
-      const results = await response.json()
+      const result = await response.json()
       
-      // Mark all images as complete
-      images.forEach(img => {
+      const aiCount = result.results.filter(r => r.authenticity === 'AI Generated').length
+      const genuineCount = result.results.length - aiCount
+      
+      setImageResults({
+        claimId: data.claimId,
+        processedAt: new Date().toISOString(),
+        notes: data.notes,
+        results: result.results,
+        fileCount: result.results.length,
+        imageCount: result.results.length,
+        aiDetectedCount: aiCount,
+        genuineCount: genuineCount,
+        riskScore: aiCount > genuineCount ? 'High' : aiCount > 0 ? 'Medium' : 'Low'
+      })
+      
+      images.forEach(image => {
         setProcessingStatus(prev => ({
           ...prev,
-          [img.id]: { progress: 100, status: 'complete' }
+          [image.id]: { status: 'complete' }
         }))
       })
       
-      return results
+      console.log(`=== Completed processing ${images.length} images ===`)
+      
     } catch (error) {
-      images.forEach(img => {
+      console.error('Image processing error:', error)
+      images.forEach(image => {
         setProcessingStatus(prev => ({
           ...prev,
-          [img.id]: { progress: 100, status: 'error' }
+          [image.id]: { status: 'error' }
         }))
       })
-      throw error
     }
   }
 
-  // NEW: Process videos function
   const processVideos = async (videos) => {
     const VIDEO_API_URL = 'http://localhost:8000'
     
-    // Simulate progress updates
-    for (let i = 0; i < videos.length; i++) {
-      const vid = videos[i]
-      setProcessingStatus(prev => ({
-        ...prev,
-        [vid.id]: { progress: 33, status: 'processing' }
-      }))
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      setProcessingStatus(prev => ({
-        ...prev,
-        [vid.id]: { progress: 66, status: 'processing' }
-      }))
-      await new Promise(resolve => setTimeout(resolve, 500))
-    }
+    console.log(`=== Processing ${videos.length} videos in single batch ===`)
 
     try {
       const formData = new FormData()
+      
       videos.forEach(video => {
         formData.append('files', video.file)
       })
 
+      // GET JWT TOKEN FROM localStorage
+      const token = localStorage.getItem('authToken')
+
       const response = await fetch(`${VIDEO_API_URL}/api/verify-batch`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`  // ADD JWT TOKEN HERE
+        },
         body: formData,
       })
 
@@ -189,25 +203,37 @@ const ClaimReport = ({ data, onReset }) => {
         throw new Error('Video verification failed')
       }
 
-      const results = await response.json()
+      const result = await response.json()
       
-      // Mark all videos as complete
-      videos.forEach(vid => {
+      const aiCount = result.results.filter(r => r.authenticity === 'AI Generated').length
+      const genuineCount = result.results.length - aiCount
+      
+      setVideoResults({
+        results: result.results,
+        fileCount: result.results.length,
+        videoCount: result.results.length,
+        aiDetectedCount: aiCount,
+        genuineCount: genuineCount,
+        riskScore: aiCount > genuineCount ? 'High' : aiCount > 0 ? 'Medium' : 'Low'
+      })
+      
+      videos.forEach(video => {
         setProcessingStatus(prev => ({
           ...prev,
-          [vid.id]: { progress: 100, status: 'complete' }
+          [video.id]: { status: 'complete' }
         }))
       })
       
-      return results
+      console.log(`=== Completed processing ${videos.length} videos ===`)
+      
     } catch (error) {
-      videos.forEach(vid => {
+      console.error('Video processing error:', error)
+      videos.forEach(video => {
         setProcessingStatus(prev => ({
           ...prev,
-          [vid.id]: { progress: 100, status: 'error' }
+          [video.id]: { status: 'error' }
         }))
       })
-      throw error
     }
   }
 
@@ -215,7 +241,6 @@ const ClaimReport = ({ data, onReset }) => {
 
   const { claimId, notes, uploadedImages, uploadedVideos } = data
 
-  // FIXED: Create a mapping of filenames to preview URLs and file objects
   const imagePreviewMap = {}
   const videoPreviewMap = {}
   
@@ -241,13 +266,13 @@ const ClaimReport = ({ data, onReset }) => {
     return 'red'
   }
 
-  const getAuthColorScheme = (auth) => {
+  const getAuthColorScheme = (auth, verdict) => {
+    if (verdict === 'Digitally Edited') return 'yellow'
     if (auth === 'Likely Genuine') return 'green'
     if (auth === 'AI Generated') return 'red'
     return 'gray'
   }
 
-  // Calculate combined statistics
   const totalFiles = (uploadedImages?.length || 0) + (uploadedVideos?.length || 0)
   const totalAI = (imageResults?.aiDetectedCount || 0) + (videoResults?.aiDetectedCount || 0)
   const totalGenuine = (imageResults?.genuineCount || 0) + (videoResults?.genuineCount || 0)
@@ -258,6 +283,7 @@ const ClaimReport = ({ data, onReset }) => {
     if (details?.reason?.toLowerCase().includes('runway')) return 'Runway'
     if (details?.reason?.toLowerCase().includes('sora')) return 'Sora'
     if (details?.reason?.toLowerCase().includes('pika')) return 'Pika'
+    if (details?.reason?.toLowerCase().includes('firefly')) return 'Firefly'
     return null
   }
 
@@ -277,6 +303,98 @@ const ClaimReport = ({ data, onReset }) => {
     }
     
     return parts.length > 0 ? parts.join(' • ') : null
+  }
+
+  const getFailedLayerInfo = (layerResults) => {
+    if (!layerResults || layerResults.length === 0) return null
+    
+    const failedLayer = layerResults.find(layer => !layer.passed)
+    if (!failedLayer) return null
+    
+    return failedLayer
+  }
+
+  const cleanReasonText = (reason) => {
+    if (!reason) return ''
+    
+    let cleaned = reason.replace(/Filename contains AI generator pattern:\s*/i, '')
+    cleaned = cleaned.replace(/TruthScan detected AI generation with [\d.]+% AI probability,?\s*/i, '')
+    cleaned = cleaned.replace(/AI-generated metadata detected:\s*/i, '')
+    
+    return cleaned.trim()
+  }
+
+  const formatImageExportDetails = (item) => {
+    const failedLayer = getFailedLayerInfo(item.layerResults)
+    
+    if (!failedLayer) {
+      return '   Verified as genuine content'
+    }
+    
+    let details = []
+    
+    if (failedLayer.verdict) {
+      details.push(`Verdict: ${failedLayer.verdict}`)
+    }
+    
+    if (failedLayer.aiPercentage !== undefined) {
+      details.push(`AI Probability: ${failedLayer.aiPercentage}%`)
+    }
+    
+    if (failedLayer.humanPercentage !== undefined) {
+      details.push(`Human Probability: ${failedLayer.humanPercentage}%`)
+    }
+    
+    if (failedLayer.confidence) {
+      details.push(`Probability Level: ${failedLayer.confidence}`)
+    }
+    
+    if (failedLayer.reason) {
+      const cleanedReason = cleanReasonText(failedLayer.reason)
+      if (cleanedReason) {
+        details.push(`Detection: ${cleanedReason}`)
+      }
+    }
+    
+    return details.length > 0 ? '   ' + details.join('\n   ') : '   AI-generated content detected'
+  }
+
+  const formatVideoExportDetails = (item) => {
+    if (!item.details) {
+      return '   Verified as genuine content'
+    }
+    
+    let details = []
+    
+    if (item.details.verdict) {
+      details.push(`Verdict: ${item.details.verdict}`)
+    }
+    
+    if (item.details.aiPercentage !== undefined) {
+      details.push(`AI Probability: ${item.details.aiPercentage}%`)
+    }
+    
+    if (item.details.humanPercentage !== undefined) {
+      details.push(`Human Probability: ${item.details.humanPercentage}%`)
+    }
+    
+    if (item.details.confidence) {
+      details.push(`Probability Level: ${item.details.confidence}`)
+    }
+    
+    const generator = getGeneratorFromDetails(item.details)
+    if (generator) {
+      details.push(`Generator: Appears to be made using ${generator}`)
+    }
+    
+    if (item.details.reason) {
+      const cleanedReason = cleanReasonText(item.details.reason)
+      if (cleanedReason) {
+        details.push(`Detection: ${cleanedReason}`)
+      }
+    }
+    
+    return details.length > 0 ? '   ' + details.join('\n   ') : '   AI-generated content detected'
   }
 
   const handleExport = () => {
@@ -299,8 +417,6 @@ Genuine: ${totalGenuine}
 ${videoResults ? `
 VIDEO ANALYSIS
 ------------------------------------
-Risk Score: ${videoResults.riskScore}
-Confidence: ${videoResults.confidence}%
 Videos Analyzed: ${videoResults.fileCount}
 AI Detected: ${videoResults.aiDetectedCount}
 Genuine: ${videoResults.genuineCount}
@@ -309,15 +425,13 @@ Detailed Video Results:
 ${videoResults.results.map((item, idx) => `
 ${idx + 1}. ${item.filename}
    Status: ${item.authenticity}
-   ${item.details.generator ? `Appears to be made using ${item.details.generator}` : 'Verified as genuine content'}
+${formatVideoExportDetails(item)}
 `).join('\n')}
 ` : ''}
 
 ${imageResults ? `
 IMAGE ANALYSIS
 ------------------------------------
-Risk Score: ${imageResults.riskScore}
-Confidence: ${imageResults.confidence}%
 Images Analyzed: ${imageResults.fileCount}
 AI Detected: ${imageResults.aiDetectedCount}
 Genuine: ${imageResults.genuineCount}
@@ -326,12 +440,12 @@ Detailed Image Results:
 ${imageResults.results.map((item, idx) => `
 ${idx + 1}. ${item.filename}
    Status: ${item.authenticity}
-   ${formatImageDetails(item.details) || 'Standard image file'}
+${formatImageExportDetails(item)}
 `).join('\n')}
 ` : ''}
 
-====================================
-Report generated by Claim Verification System
+
+
 `
     const blob = new Blob([reportContent], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
@@ -344,17 +458,14 @@ Report generated by Claim Verification System
 
   return (
     <>
-      {/* Header */}
       <Box bg="white" borderBottom="1px" borderColor="gray.200">
         <Container maxW="container.xl" py={{ base: 3, md: 4 }} px={{ base: 4, md: 6 }}>
           <Heading size={{ base: "md", md: "lg" }} color="gray.900">Claim Analysis Report</Heading>
         </Container>
       </Box>
 
-      {/* Main Content */}
       <Container maxW="container.xl" py={{ base: 4, md: 8 }} px={{ base: 4, md: 6 }}>
         <VStack spacing={{ base: 4, md: 6 }} align="stretch">
-          {/* Summary Card */}
           <Box bg="white" borderRadius="lg" border="1px" borderColor="gray.200" p={{ base: 4, md: 6 }}>
             <Flex 
               direction={{ base: "column", md: "row" }}
@@ -376,7 +487,6 @@ Report generated by Claim Verification System
               </Text>
             </Flex>
 
-            {/* NEW: Processing indicator */}
             {isProcessing ? (
               <Box p={{ base: 4, md: 6 }} bg="blue.50" borderRadius="lg" textAlign="center" mb={4}>
                 <Icon as={FiClock} boxSize={{ base: 10, md: 12 }} color="blue.600" mb={3} />
@@ -391,7 +501,7 @@ Report generated by Claim Verification System
               <>
                 <HStack spacing={{ base: 2, md: 4 }} flexWrap={{ base: "wrap", md: "nowrap" }}>
                   <Box flex={1} minW={{ base: "full", sm: "150px" }} p={3} bg="red.50" borderRadius="md" border="1px" borderColor="red.200">
-                    <Text fontSize={{ base: "xs", md: "sm" }} color="red.700" fontWeight="medium">Total AI Detected</Text>
+                    <Text fontSize={{ base: "xs", md: "sm" }} color="red.700" fontWeight="medium">Total Flagged</Text>
                     <Text fontSize={{ base: "lg", md: "xl" }} fontWeight="bold" color="red.700">{totalAI}</Text>
                   </Box>
                   <Box flex={1} minW={{ base: "full", sm: "150px" }} p={3} bg="green.50" borderRadius="md" border="1px" borderColor="green.200">
@@ -418,17 +528,16 @@ Report generated by Claim Verification System
             )}
           </Box>
 
-          {/* NEW: Files Grid with Processing Status */}
           <Box bg="white" borderRadius="lg" border="1px" borderColor="gray.200" p={{ base: 4, md: 6 }}>
             <Heading size={{ base: "xs", md: "sm" }} color="gray.900" mb={4}>
               {isProcessing ? 'Processing Files' : 'Uploaded Files'}
             </Heading>
             
             <Grid templateColumns={{ base: "repeat(auto-fill, minmax(150px, 1fr))", md: "repeat(auto-fill, minmax(200px, 1fr))" }} gap={{ base: 3, md: 4 }}>
-              {/* Images */}
               {uploadedImages && uploadedImages.map(img => {
-                const status = processingStatus[img.id] || { progress: 0, status: 'pending' }
+                const status = processingStatus[img.id] || { status: 'pending' }
                 const result = imageResults?.results?.find(r => r.filename === img.name)
+                const failedLayer = result ? getFailedLayerInfo(result.layerResults) : null
                 
                 return (
                   <Box
@@ -457,22 +566,13 @@ Report generated by Claim Verification System
                       
                       <Flex justify="center" align="center">
                         {status.status === 'complete' && result ? (
-                          <Badge colorScheme={getAuthColorScheme(result.authenticity)} fontSize="xs">
-                            {result.authenticity}
+                          <Badge colorScheme={getAuthColorScheme(result.authenticity, failedLayer?.verdict)} fontSize="xs">
+                            {failedLayer?.verdict === 'Digitally Edited' ? 'Digitally Edited' : result.authenticity}
                           </Badge>
                         ) : status.status === 'error' ? (
                           <Badge colorScheme="red" fontSize="xs">Error</Badge>
                         ) : (
-                          <CircularProgress
-                            value={status.progress}
-                            size="40px"
-                            color="blue.500"
-                            thickness="8px"
-                          >
-                            <CircularProgressLabel fontSize="xs">
-                              {status.progress}%
-                            </CircularProgressLabel>
-                          </CircularProgress>
+                          <SandClockIcon />
                         )}
                       </Flex>
                     </VStack>
@@ -480,9 +580,8 @@ Report generated by Claim Verification System
                 )
               })}
 
-              {/* Videos */}
               {uploadedVideos && uploadedVideos.map(vid => {
-                const status = processingStatus[vid.id] || { progress: 0, status: 'pending' }
+                const status = processingStatus[vid.id] || { status: 'pending' }
                 const result = videoResults?.results?.find(r => r.filename === vid.name)
                 
                 return (
@@ -520,16 +619,7 @@ Report generated by Claim Verification System
                         ) : status.status === 'error' ? (
                           <Badge colorScheme="red" fontSize="xs">Error</Badge>
                         ) : (
-                          <CircularProgress
-                            value={status.progress}
-                            size="40px"
-                            color="purple.500"
-                            thickness="8px"
-                          >
-                            <CircularProgressLabel fontSize="xs">
-                              {status.progress}%
-                            </CircularProgressLabel>
-                          </CircularProgress>
+                          <SandClockIcon />
                         )}
                       </Flex>
                     </VStack>
@@ -539,8 +629,7 @@ Report generated by Claim Verification System
             </Grid>
           </Box>
 
-          {/* Tabbed Analysis - Only show when processing is complete */}
-          {!isProcessing && (imageResults || videoResults) && (
+          {(imageResults || videoResults) && (
             <Box bg="white" borderRadius="lg" border="1px" borderColor="gray.200" overflow="hidden">
               <Tabs>
                 <TabList overflowX="auto" overflowY="hidden">
@@ -559,7 +648,6 @@ Report generated by Claim Verification System
                 </TabList>
 
                 <TabPanels>
-                  {/* Video Results Tab */}
                   {videoResults && (
                     <TabPanel p={0}>
                       <Box px={{ base: 4, md: 6 }} py={4} borderBottom="1px" borderColor="gray.200" bg="purple.50">
@@ -572,7 +660,7 @@ Report generated by Claim Verification System
                           <Box>
                             <Heading size={{ base: "xs", md: "sm" }} color="gray.900">Video Analysis</Heading>
                             <Text fontSize="xs" color="gray.600" mt={1}>
-                              Multi-layer verification pipeline
+                              
                             </Text>
                           </Box>
                           <HStack spacing={4}>
@@ -581,10 +669,6 @@ Report generated by Claim Verification System
                               <Badge colorScheme={getRiskColorScheme(videoResults.riskScore)}>
                                 {videoResults.riskScore}
                               </Badge>
-                            </Box>
-                            <Box textAlign="center">
-                              <Text fontSize="xs" color="gray.600">Confidence</Text>
-                              <Text fontSize="sm" fontWeight="bold">{videoResults.confidence}%</Text>
                             </Box>
                           </HStack>
                         </Flex>
@@ -667,19 +751,68 @@ Report generated by Claim Verification System
                                       </Text>
                                     </Box>
                                   )}
-
                                   <Box flex="1" w="full">
                                     <Text fontSize="sm" fontWeight="medium" color="gray.700" mb={2}>
                                       Analysis Result
                                     </Text>
-                                    {item.failedAtLayer ? (
+                                    {item.failedAtLayer && item.details ? (
                                       <Box p={4} bg="red.50" borderRadius="md" border="1px" borderColor="red.200">
-                                        <Text fontSize="sm" color="red.700" fontWeight="medium" mb={2}>
+                                        <Text fontSize="sm" color="red.700" fontWeight="medium" mb={3}>
                                           AI Content Detected
                                         </Text>
-                                        <Text fontSize="sm" color="red.600">
-                                          {generator ? `Appears to be made using ${generator}` : 'AI-generated content identified'}
-                                        </Text>
+                                        
+                                        <VStack spacing={2} align="stretch">
+                                          {item.details.verdict && (
+                                            <Flex justify="space-between">
+                                              <Text fontSize="xs" color="gray.600">Verdict:</Text>
+                                              <Text fontSize="xs" fontWeight="semibold" color="red.700">
+                                                {item.details.verdict}
+                                              </Text>
+                                            </Flex>
+                                          )}
+                                          
+                                          {item.details.aiPercentage !== undefined && (
+                                            <Flex justify="space-between">
+                                              <Text fontSize="xs" color="gray.600">AI Probability:</Text>
+                                              <Text fontSize="xs" fontWeight="semibold" color="red.700">
+                                                {item.details.aiPercentage}%
+                                              </Text>
+                                            </Flex>
+                                          )}
+                                          
+                                          {item.details.humanPercentage !== undefined && (
+                                            <Flex justify="space-between">
+                                              <Text fontSize="xs" color="gray.600">Human Probability:</Text>
+                                              <Text fontSize="xs" fontWeight="semibold" color="green.700">
+                                                {item.details.humanPercentage}%
+                                              </Text>
+                                            </Flex>
+                                          )}
+                                          {item.details.confidence && (
+                                            <Flex justify="space-between">
+                                              <Text fontSize="xs" color="gray.600">Probability Level:</Text>
+                                              <Text fontSize="xs" fontWeight="semibold" color="gray.700">
+                                                {item.details.confidence}
+                                              </Text>
+                                            </Flex>
+                                          )}
+
+                                          {generator && (
+                                            <Box mt={2} pt={2} borderTop="1px" borderColor="red.200">
+                                              <Text fontSize="xs" color="red.600">
+                                                Appears to be made using {generator}
+                                              </Text>
+                                            </Box>
+                                          )}
+
+                                          {item.details.reason && (
+                                            <Box mt={2} pt={2} borderTop="1px" borderColor="red.200">
+                                              <Text fontSize="xs" color="red.600">
+                                                {cleanReasonText(item.details.reason)}
+                                              </Text>
+                                            </Box>
+                                          )}
+                                        </VStack>
                                       </Box>
                                     ) : (
                                       <Box p={4} bg="green.50" borderRadius="md" border="1px" borderColor="green.200">
@@ -698,20 +831,19 @@ Report generated by Claim Verification System
                     </TabPanel>
                   )}
 
-                  {/* Image Results Tab */}
                   {imageResults && (
                     <TabPanel p={0}>
                       <Box px={{ base: 4, md: 6 }} py={4} borderBottom="1px" borderColor="gray.200" bg="blue.50">
                         <Flex 
                           direction={{ base: "column", md: "row" }}
-                          justify="space-between" 
+                          justify="space-between"
                           align={{ base: "start", md: "center" }}
                           gap={{ base: 3, md: 0 }}
                         >
                           <Box>
                             <Heading size={{ base: "xs", md: "sm" }} color="gray.900">Image Analysis</Heading>
                             <Text fontSize="xs" color="gray.600" mt={1}>
-                              Processed through image verification pipeline
+                              
                             </Text>
                           </Box>
                           <HStack spacing={4}>
@@ -721,10 +853,6 @@ Report generated by Claim Verification System
                                 {imageResults.riskScore}
                               </Badge>
                             </Box>
-                            <Box textAlign="center">
-                              <Text fontSize="xs" color="gray.600">Confidence</Text>
-                              <Text fontSize="sm" fontWeight="bold">{imageResults.confidence}%</Text>
-                            </Box>
                           </HStack>
                         </Flex>
                       </Box>
@@ -733,6 +861,8 @@ Report generated by Claim Verification System
                         {imageResults.results && imageResults.results.map((item, idx) => {
                           const formattedDetails = formatImageDetails(item.details)
                           const imagePreview = imagePreviewMap[item.filename]
+                          const failedLayer = getFailedLayerInfo(item.layerResults)
+                          const isDigitallyEdited = failedLayer?.verdict === 'Digitally Edited'
                           
                           return (
                             <AccordionItem key={idx} border="none" borderBottom="1px" borderColor="gray.100">
@@ -740,7 +870,7 @@ Report generated by Claim Verification System
                                 <Flex flex={1} align="center" gap={3}>
                                   <Icon
                                     as={item.authenticity === 'Likely Genuine' ? FiCheckCircle : FiXCircle}
-                                    color={item.authenticity === 'Likely Genuine' ? 'green.500' : 'red.500'}
+                                    color={item.authenticity === 'Likely Genuine' ? 'green.500' : isDigitallyEdited ? 'yellow.500' : 'red.500'}
                                     boxSize={5}
                                   />
                                   <Box flex={1} textAlign="left">
@@ -748,14 +878,13 @@ Report generated by Claim Verification System
                                       {item.filename}
                                     </Text>
                                     <HStack spacing={2} mt={1} flexWrap="wrap">
-                                      <Badge colorScheme={getAuthColorScheme(item.authenticity)} fontSize="xs">
-                                        {item.authenticity}
+                                      <Badge colorScheme={getAuthColorScheme(item.authenticity, failedLayer?.verdict)} fontSize="xs">
+                                        {isDigitallyEdited ? 'Digitally Edited' : item.authenticity}
                                       </Badge>
                                       {item.details?.isScreenshot && (
                                         <Badge colorScheme="purple" fontSize="xs" display="flex" alignItems="center" gap={1}>
                                           <Icon as={FiMonitor} boxSize={3} />
-                                          Screenshot
-                                        </Badge>
+                                          Screenshot</Badge>
                                       )}
                                       {item.details?.isCameraPhoto && (
                                         <Badge colorScheme="blue" fontSize="xs" display="flex" alignItems="center" gap={1}>
@@ -818,43 +947,138 @@ Report generated by Claim Verification System
                                   )}
 
                                   <Box flex="1" w="full">
-                                    <Text fontSize="sm" fontWeight="medium" color="gray.700" mb={2}>
-                                      Analysis Result
-                                    </Text>
-                                    {item.authenticity === 'AI Generated' ? (
-                                      <Box p={4} bg="red.50" borderRadius="md" border="1px" borderColor="red.200">
-                                        <Text fontSize="sm" color="red.700" fontWeight="medium">
-                                          AI Content Detected
+                                    <VStack spacing={4} align="stretch">
+                                      <Box>
+                                        <Text fontSize="sm" fontWeight="medium" color="gray.700" mb={2}>
+                                          Analysis Result
                                         </Text>
-                                      </Box>
-                                    ) : (
-                                      <Box p={4} bg="green.50" borderRadius="md" border="1px" borderColor="green.200">
-                                        <Text fontSize="sm" color="green.700" fontWeight="medium" mb={2}>
-                                          Genuine Content
-                                        </Text>
-                                        {formattedDetails && (
-                                          <HStack spacing={3} mt={2} flexWrap="wrap">
-                                            {item.details?.isScreenshot && (
-                                              <Flex align="center" gap={2}>
-                                                <Icon as={FiMonitor} color="green.600" boxSize={4} />
-                                                <Text fontSize="xs" color="green.600">Screenshot detected</Text>
-                                              </Flex>
+                                        {item.authenticity === 'AI Generated' && failedLayer ? (
+                                          <Box p={4} bg={isDigitallyEdited ? "yellow.50" : "red.50"} borderRadius="md" border="1px" borderColor={isDigitallyEdited ? "yellow.200" : "red.200"}>
+                                            <Text fontSize="sm" color={isDigitallyEdited ? "yellow.700" : "red.700"} fontWeight="medium" mb={3}>
+                                              {isDigitallyEdited ? 'Digitally Edited Content' : 'AI Content Detected'}
+                                            </Text>
+                                            
+                                            <VStack spacing={2} align="stretch">
+                                              {failedLayer.verdict && (
+                                                <Flex justify="space-between">
+                                                  <Text fontSize="xs" color="gray.600">Verdict:</Text>
+                                                  <Text fontSize="xs" fontWeight="semibold" color={isDigitallyEdited ? "yellow.700" : "red.700"}>
+                                                    {failedLayer.verdict}
+                                                  </Text>
+                                                </Flex>
+                                              )}
+                                              
+                                              {failedLayer.aiPercentage !== undefined && (
+                                                <Flex justify="space-between">
+                                                  <Text fontSize="xs" color="gray.600">AI Probability:</Text>
+                                                  <Text fontSize="xs" fontWeight="semibold" color={isDigitallyEdited ? "yellow.700" : "red.700"}>
+                                                    {failedLayer.aiPercentage}%
+                                                  </Text>
+                                                </Flex>
+                                              )}
+                                              
+                                              {failedLayer.humanPercentage !== undefined && (
+                                                <Flex justify="space-between">
+                                                  <Text fontSize="xs" color="gray.600">Human Probability:</Text>
+                                                  <Text fontSize="xs" fontWeight="semibold" color="green.700">
+                                                    {failedLayer.humanPercentage}%
+                                                  </Text>
+                                                </Flex>
+                                              )}
+                                              
+                                              {failedLayer.confidence && (
+                                                <Flex justify="space-between">
+                                                  <Text fontSize="xs" color="gray.600">Probability Level:</Text>
+                                                  <Text fontSize="xs" fontWeight="semibold" color="gray.700">
+                                                    {failedLayer.confidence}
+                                                  </Text>
+                                                </Flex>
+                                              )}
+
+                                              {failedLayer.reason && (
+                                                <Box mt={2} pt={2} borderTop="1px" borderColor={isDigitallyEdited ? "yellow.200" : "red.200"}>
+                                                  <Text fontSize="xs" color={isDigitallyEdited ? "yellow.600" : "red.600"}>
+                                                    {cleanReasonText(failedLayer.reason)}
+                                                  </Text>
+                                                </Box>
+                                              )}
+                                            </VStack>
+
+                                            {failedLayer.heatmapUrl && (
+                                              <Box mt={3}>
+                                                <Text fontSize="xs" fontWeight="semibold" color="gray.700" mb={2}>
+                                                  AI Detection Heatmap:
+                                                </Text>
+                                                <Image
+                                                  src={failedLayer.heatmapUrl}
+                                                  alt="AI Detection Heatmap"
+                                                  width="100%"
+                                                  borderRadius="md"
+                                                  border="1px"
+                                                  borderColor="gray.300"
+                                                  objectFit="contain"
+                                                  maxH="300px"
+                                                  fallback={
+                                                    <Box 
+                                                      width="100%" 
+                                                      p={4} 
+                                                      bg="gray.100" 
+                                                      borderRadius="md" 
+                                                      border="1px" 
+                                                      borderColor="gray.300"
+                                                      textAlign="center"
+                                                    >
+                                                      <Text fontSize="xs" color="gray.600">
+                                                        Heatmap not available
+                                                      </Text>
+                                                    </Box>
+                                                  }
+                                                />
+                                              </Box>
                                             )}
-                                            {item.details?.isCameraPhoto && (
-                                              <Flex align="center" gap={2}>
-                                                <Icon as={FiCamera} color="green.600" boxSize={4} />
-                                                <Text fontSize="xs" color="green.600">Camera photo</Text>
-                                              </Flex>
+
+                                            {failedLayer.analysis && failedLayer.analysis.analysis && (
+                                              <Box mt={3} p={3} bg="white" borderRadius="md" border="1px" borderColor="gray.200">
+                                                <Text fontSize="xs" fontWeight="semibold" color="gray.700" mb={2}>
+                                                  <Icon as={FiInfo} boxSize={3} mr={1} />
+                                                  Detailed Analysis:
+                                                </Text>
+                                                <Text fontSize="xs" color="gray.600" whiteSpace="pre-wrap">
+                                                  {failedLayer.analysis.analysis}
+                                                </Text>
+                                              </Box>
                                             )}
-                                          </HStack>
-                                        )}
-                                        {item.details?.deviceInfo && (
-                                          <Text fontSize="xs" color="green.600" mt={2}>
-                                            Device: {item.details.deviceInfo}
-                                          </Text>
+                                          </Box>
+                                        ) : (
+                                          <Box p={4} bg="green.50" borderRadius="md" border="1px" borderColor="green.200">
+                                            <Text fontSize="sm" color="green.700" fontWeight="medium" mb={2}>
+                                              Genuine Content
+                                            </Text>
+                                            {formattedDetails && (
+                                              <HStack spacing={3} mt={2} flexWrap="wrap">
+                                                {item.details?.isScreenshot && (
+                                                  <Flex align="center" gap={2}>
+                                                    <Icon as={FiMonitor} color="green.600" boxSize={4} />
+                                                    <Text fontSize="xs" color="green.600">Screenshot detected</Text>
+                                                  </Flex>
+                                                )}
+                                                {item.details?.isCameraPhoto && (
+                                                  <Flex align="center" gap={2}>
+                                                    <Icon as={FiCamera} color="green.600" boxSize={4} />
+                                                    <Text fontSize="xs" color="green.600">Camera photo</Text>
+                                                  </Flex>
+                                                )}
+                                              </HStack>
+                                            )}
+                                            {item.details?.deviceInfo && (
+                                              <Text fontSize="xs" color="green.600" mt={2}>
+                                                Device: {item.details.deviceInfo}
+                                              </Text>
+                                            )}
+                                          </Box>
                                         )}
                                       </Box>
-                                    )}
+                                    </VStack>
                                   </Box>
                                 </Flex>
                               </AccordionPanel>
@@ -869,7 +1093,6 @@ Report generated by Claim Verification System
             </Box>
           )}
 
-          {/* Actions */}
           <HStack spacing={3} flexWrap={{ base: "wrap", md: "nowrap" }}>
             <Button 
               colorScheme="blue" 

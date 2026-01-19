@@ -1,334 +1,275 @@
 """
-TruthScan AI Video Detector - For Node.js Backend Integration
-Extracts middle frame from video and analyzes it, returns JSON to stdout
+TruthScan AI Video Detector - Direct API Integration
+Sends video directly to TruthScan API without frame extraction
 """
 
-import os
-import sys
-import time
+import requests
 import json
+import sys
+import os
+import subprocess
+import time
+import random
 from pathlib import Path
-
-# Only import if not already installed
-try:
-    import cv2
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.chrome.options import Options
-    from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
-    from selenium.webdriver.common.keys import Keys
-except ImportError:
-    print(json.dumps({"success": False, "error": "Required packages not installed. Run: pip install selenium opencv-python"}))
-    sys.exit(1)
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 
-def extract_most_complex_frame(video_path, output_path, sample_rate=30):
+class TruthScanVideoAPI:
     """
-    Extract the most visually complex frame from a video.
-    
-    Args:
-        video_path (str): Path to the video file
-        output_path (str): Path where to save the extracted frame
-        sample_rate (int): Analyze every Nth frame (default: 30)
-        
-    Returns:
-        str: Path to the extracted frame image
-    """
-    if not os.path.exists(video_path):
-        raise FileNotFoundError(f"Video not found: {video_path}")
-    
-    cap = cv2.VideoCapture(video_path)
-    
-    if not cap.isOpened():
-        raise ValueError(f"Could not open video file: {video_path}")
-    
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    
-    max_complexity_score = 0
-    best_frame = None
-    best_frame_idx = 0
-    
-    frame_idx = 0
-    
-    while True:
-        ret, frame = cap.read()
-        
-        if not ret:
-            break
-        
-        if frame_idx % sample_rate == 0:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            
-            laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-            pixel_var = gray.var()
-            
-            edges = cv2.Canny(gray, 50, 150)
-            edge_density = (edges > 0).sum() / edges.size
-            
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            color_var = hsv[:,:,1].var()
-            
-            complexity_score = (
-                laplacian_var * 0.35 +
-                pixel_var * 0.25 +
-                edge_density * 5000 +
-                color_var * 0.15
-            )
-            
-            if complexity_score > max_complexity_score:
-                max_complexity_score = complexity_score
-                best_frame = frame.copy()
-                best_frame_idx = frame_idx
-        
-        frame_idx += 1
-    
-    cap.release()
-    
-    if best_frame is None:
-        raise ValueError("Could not extract any frame from video")
-    
-    cv2.imwrite(output_path, best_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    
-    return output_path
-
-
-class TruthScanDetector:
-    """
-    TruthScan AI Image Detector - waits for analysis to complete.
+    Direct API integration with TruthScan for video detection
     """
     
     def __init__(self):
-        self.url = "https://truthscan.com/ai-image-detector"
-        self.driver = None
-        
-    def _setup_driver(self):
-        """Setup Chrome WebDriver."""
-        chrome_options = Options()
-        
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--disable-features=NetworkService')
-        chrome_options.add_argument('--window-size=1920x1080')
-        chrome_options.add_argument('--disable-features=VizDisplayCompositor')
-        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        try:
-            self.driver = webdriver.Chrome(options=chrome_options)
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        except Exception as e:
-            raise Exception(f"Browser initialization failed: {e}")
+        self.base_url = "https://truthscan.com/api"
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Origin': 'https://truthscan.com',
+            'Referer': 'https://truthscan.com/ai-video-detector',
+            'Sec-Ch-Ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Brave";v="144"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Gpc': '1'
+        })
     
-    def _safe_popup_close(self):
-        """Safely close popup without crashing the browser."""
-        try:
-            body = self.driver.find_element(By.TAG_NAME, "body")
-            for i in range(3):
-                body.send_keys(Keys.ESCAPE)
-                time.sleep(0.2)
-            return True
-        except:
-            return False
-    
-    def _check_if_browser_alive(self):
-        """Check if browser is still responsive."""
-        try:
-            self.driver.title
-            return True
-        except WebDriverException:
-            return False
-        
-    def check_image(self, image_path, wait_time=120):
+    def get_video_duration(self, video_path):
         """
-        Upload and analyze an image.
+        Get actual video duration using ffprobe
         
         Args:
-            image_path (str): Path to the image file
-            wait_time (int): Maximum seconds to wait for results
+            video_path (str): Path to the video file
             
         Returns:
-            dict: Detection results
+            int: Duration in seconds (rounded up)
         """
-        if not Path(image_path).exists():
+        try:
+            # Try using ffprobe to get accurate duration
+            cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                video_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                duration = float(result.stdout.strip())
+                rounded_duration = max(1, int(round(duration)))
+                print(f"DEBUG: FFprobe detected duration: {duration:.2f}s (rounded to {rounded_duration}s)", file=sys.stderr)
+                return rounded_duration
+            else:
+                print(f"DEBUG: ffprobe failed, using file size estimation", file=sys.stderr)
+                raise Exception("ffprobe unavailable")
+                
+        except Exception as e:
+            # Fallback to file size estimation if ffprobe fails
+            print(f"DEBUG: Using file size estimation (ffprobe error: {e})", file=sys.stderr)
+            file_size = os.path.getsize(video_path)
+            # Rough estimate: assume ~1MB per second for typical video
+            estimated_duration = max(1, int(file_size / (1024 * 1024)))
+            print(f"DEBUG: Estimated duration from file size: {estimated_duration}s", file=sys.stderr)
+            return estimated_duration
+    
+    def check_video(self, video_path):
+        """
+        Analyze a video for AI generation using direct API calls
+        
+        Args:
+            video_path (str): Path to the video file
+            
+        Returns:
+            dict: Complete analysis results matching expected format
+        """
+        if not Path(video_path).exists():
             return {
                 "success": False,
-                "error": f"Image not found: {image_path}"
+                "error": f"Video not found: {video_path}"
             }
         
-        abs_path = str(Path(image_path).resolve())
-        
         try:
-            self._setup_driver()
+            # Get accurate video duration using ffprobe
+            duration = self.get_video_duration(video_path)
             
-            self.driver.get(self.url)
-            time.sleep(5)
+            # Add initial delay before upload - WITH RANDOMIZATION
+            time.sleep(1 + random.uniform(0.5, 1.5))
             
-            self._safe_popup_close()
+            print(f"DEBUG: Uploading video {video_path}", file=sys.stderr)
             
-            file_input = self._find_file_input()
+            # Step 1: Upload and detect video in one API call
+            detection_result = self._ai_detect_video(video_path, duration)
             
-            if not file_input:
-                raise Exception("Could not find file upload element")
+            if not detection_result.get('score') and detection_result.get('error'):
+                print(f"DEBUG: Detection failed: {detection_result}", file=sys.stderr)
+                return {
+                    "success": False,
+                    "error": f"Video detection failed: {detection_result.get('error', 'Unknown error')}"
+                }
             
-            file_input.send_keys(abs_path)
+            print(f"DEBUG: Detection successful", file=sys.stderr)
             
-            time.sleep(2)
-            self._safe_popup_close()
-            
-            result = self._wait_for_results(wait_time)
-            
-            return result
+            # Format the response to match expected structure
+            return self._format_results(detection_result)
             
         except Exception as e:
+            print(f"DEBUG: Exception: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
             return {
                 "success": False,
                 "error": str(e)
             }
-        finally:
-            if self.driver:
-                try:
-                    self.driver.quit()
-                except:
-                    pass
     
-    def _find_file_input(self):
-        """Find the file input element."""
-        wait = WebDriverWait(self.driver, 10)
-        
-        selectors = [
-            (By.CSS_SELECTOR, "input[type='file']"),
-            (By.CSS_SELECTOR, "input[accept*='image']"),
-            (By.XPATH, "//input[@type='file']"),
-        ]
-        
-        for by, selector in selectors:
-            try:
-                element = wait.until(EC.presence_of_element_located((by, selector)))
-                if element:
-                    return element
-            except:
-                continue
-        
-        return None
-    
-    def _wait_for_results(self, wait_time):
+    def _ai_detect_video(self, video_path, duration):
         """
-        Wait for analysis to complete - "Analyzing..." must disappear.
-        
-        Returns:
-            dict: Parsed results
+        Send video to TruthScan API for AI detection
         """
-        import re
-        
-        result = {
-            "success": False,
-            "verdict": None,
-            "ai_percentage": None,
-            "human_percentage": None,
-            "confidence": None,
-            "is_ai_generated": None
-        }
-        
-        results_found = False
-        
-        for i in range(wait_time):
-            time.sleep(1)
-            
-            if not self._check_if_browser_alive():
-                break
-            
-            if i in [10, 25, 40]:
-                try:
-                    self._safe_popup_close()
-                except:
-                    pass
-            
-            try:
-                page_text = self.driver.find_element(By.TAG_NAME, "body").text
-                
-                is_analyzing = "Analyzing..." in page_text or "Inspecting Pixels" in page_text
-                
-                if is_analyzing:
-                    continue
-                
-                has_probability_result = bool(re.search(r'(\d+)\s*%\s+Probability', page_text))
-                has_confidence_result = bool(re.search(r'(High|Medium|Low)\s+Confidence', page_text))
-                has_classification_result = bool(re.search(r'(Fake|Real)\s+Classification', page_text))
-                
-                if has_probability_result and has_classification_result:
-                    results_found = True
-                    time.sleep(2)
-                    break
-                
-                lines = page_text.split('\n')
-                for idx, line in enumerate(lines):
-                    if re.search(r'\d+%', line):
-                        context = '\n'.join(lines[max(0,idx-2):min(len(lines),idx+3)])
-                        if 'Probability' in context and 'Classification' in context:
-                            if 'Detection Accuracy' not in context:
-                                results_found = True
-                                time.sleep(2)
-                                break
-                
-                if results_found:
-                    break
-                    
-            except Exception as e:
-                continue
+        url = f"{self.base_url}/ai-detect-video"
         
         try:
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text
+            file_name = Path(video_path).name
+            file_ext = Path(video_path).suffix.lower()
             
-            if "Analyzing..." in page_text:
-                result["error"] = "Analysis timeout - still processing"
-                return result
-            
-            prob_match = re.search(r'(\d+)\s*%\s+Probability', page_text)
-            if prob_match:
-                probability = float(prob_match.group(1))
-                result["ai_percentage"] = probability
-                result["human_percentage"] = 100 - probability
-            
-            conf_match = re.search(r'(High|Medium|Low)\s+Confidence', page_text)
-            if conf_match:
-                result["confidence"] = conf_match.group(1)
-            
-            class_match = re.search(r'(Fake|Real)\s+Classification', page_text)
-            if class_match:
-                classification = class_match.group(1)
-                result["verdict"] = "AI Generated" if classification == "Fake" else "Human Created"
-                result["is_ai_generated"] = (classification == "Fake")
-            
-            if not prob_match:
-                percentages = re.findall(r'(\d+)\s*%', page_text)
-                for pct in percentages:
-                    pct_val = int(pct)
-                    pct_idx = page_text.find(f"{pct}%")
-                    context = page_text[max(0,pct_idx-100):min(len(page_text),pct_idx+200)]
-                    
-                    if 'Detection Accuracy' not in context and ('Probability' in context or 'Classification' in context):
-                        result["ai_percentage"] = float(pct)
-                        result["human_percentage"] = 100 - float(pct)
-                        break
-            
-            if (result["verdict"] or result["ai_percentage"] is not None) and "Analyzing..." not in page_text:
-                result["success"] = True
+            # Determine MIME type
+            if file_ext == '.mp4':
+                mime_type = 'video/mp4'
+            elif file_ext == '.mov':
+                mime_type = 'video/quicktime'
+            elif file_ext == '.avi':
+                mime_type = 'video/x-msvideo'
+            elif file_ext == '.webm':
+                mime_type = 'video/webm'
             else:
-                result["error"] = "Incomplete results"
+                mime_type = 'video/mp4'  # Default fallback
             
+            print(f"DEBUG: Uploading {file_name} as {mime_type}, duration: {duration}s", file=sys.stderr)
+            
+            # Try with requests_toolbelt for better multipart handling
+            try:
+                with open(video_path, 'rb') as f:
+                    multipart_data = MultipartEncoder(
+                        fields={
+                            'video': (file_name, f, mime_type),
+                            'fileName': file_name,
+                            'fileType': mime_type,
+                            'duration': str(duration)
+                        }
+                    )
+                    
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                        'Accept': '*/*',
+                        'Accept-Language': 'en-US,en;q=0.8',
+                        'Origin': 'https://truthscan.com',
+                        'Referer': 'https://truthscan.com/ai-video-detector',
+                        'Sec-Ch-Ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Brave";v="144"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        'Sec-Fetch-Dest': 'empty',
+                        'Sec-Fetch-Mode': 'cors',
+                        'Sec-Fetch-Site': 'same-origin',
+                        'Sec-Gpc': '1',
+                        'Content-Type': multipart_data.content_type
+                    }
+                    
+                    response = requests.post(
+                        url,
+                        data=multipart_data,
+                        headers=headers,
+                        timeout=120  # Longer timeout for video uploads
+                    )
+            except ImportError:
+                # Fallback to standard requests if requests_toolbelt not available
+                with open(video_path, 'rb') as f:
+                    files = {
+                        'video': (file_name, f, mime_type)
+                    }
+                    data = {
+                        'fileName': file_name,
+                        'fileType': mime_type,
+                        'duration': str(duration)
+                    }
+                    
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                        'Accept': '*/*',
+                        'Accept-Language': 'en-US,en;q=0.8',
+                        'Origin': 'https://truthscan.com',
+                        'Referer': 'https://truthscan.com/ai-video-detector',
+                        'Sec-Ch-Ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Brave";v="144"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        'Sec-Fetch-Dest': 'empty',
+                        'Sec-Fetch-Mode': 'cors',
+                        'Sec-Fetch-Site': 'same-origin',
+                        'Sec-Gpc': '1'
+                    }
+                    
+                    response = requests.post(
+                        url,
+                        files=files,
+                        data=data,
+                        headers=headers,
+                        timeout=120
+                    )
+            
+            print(f"DEBUG: Response status: {response.status_code}", file=sys.stderr)
+            
+            if response.status_code != 200:
+                return {
+                    "error": f"{response.status_code} {response.reason}: {response.text[:200]}"
+                }
+            
+            result = response.json()
+            print(f"DEBUG: Response data: {result}", file=sys.stderr)
+            
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            return {
+                "error": f"Request failed: {str(e)}"
+            }
         except Exception as e:
-            result["error"] = f"Parsing error: {str(e)}"
+            return {
+                "error": f"Detection error: {str(e)}"
+            }
+    
+    def _format_results(self, detection):
+        """
+        Format results to match expected output format
+        TruthScan video API returns: videoScore, videoIsAI, videoConfidence, result_details
+        """
+        # Use videoScore (the ML model score) as primary indicator
+        ai_percentage = detection.get('videoScore', 0)
         
-        return result
+        # Determine if it's AI generated using videoIsAI
+        is_ai = detection.get('videoIsAI', False)
+        
+        # Get confidence level
+        confidence = detection.get('videoConfidence', 'Unknown')
+        
+        # Get verdict from result_details
+        result_details = detection.get('result_details', {})
+        verdict = result_details.get('final_result', 'AI Generated' if is_ai else 'Human Created')
+        
+        # Format the response to match expected structure
+        return {
+            "success": True,
+            "verdict": verdict,
+            "ai_percentage": ai_percentage,
+            "human_percentage": 100 - ai_percentage,
+            "confidence": confidence,
+            "is_ai_generated": is_ai
+        }
 
 
-# Main execution - receives video path from command line
+# Main execution
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(json.dumps({
@@ -340,27 +281,11 @@ if __name__ == "__main__":
     video_path = sys.argv[1]
     
     try:
-        # Create temp directory for frame extraction
-        temp_dir = os.path.join(os.path.dirname(video_path), 'temp_frames')
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
+        # Analyze the video directly
+        detector = TruthScanVideoAPI()
+        result = detector.check_video(video_path)
         
-        # Extract frame
-        frame_path = os.path.join(temp_dir, f"frame_{int(time.time())}.jpg")
-        extract_most_complex_frame(video_path, frame_path, sample_rate=30)
-        
-        # Analyze the extracted frame
-        detector = TruthScanDetector()
-        result = detector.check_image(frame_path, wait_time=120)
-        
-        # Clean up frame
-        try:
-            os.remove(frame_path)
-            os.rmdir(temp_dir)
-        except:
-            pass
-        
-        # Output JSON to stdout for Node.js to read
+        # Output JSON to stdout
         print(json.dumps(result))
         
     except Exception as e:
