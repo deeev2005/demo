@@ -95,7 +95,7 @@ const LoginPage = ({ onLogin }) => {
             </Box>
             <Box>
               <Heading size="md" color="gray.900">
-                Claim Verification System
+                Authenq AI
               </Heading>
               <Text fontSize="xs" color="gray.600">
                 AI-Powered Authenticity Analysis
@@ -125,7 +125,7 @@ const LoginPage = ({ onLogin }) => {
                   Welcome Back
                 </Heading>
                 <Text color="gray.600" fontSize="sm">
-                  Sign in to access your claim verification dashboard
+                  Sign in to access your Authenq AI dashboard
                 </Text>
               </Box>
 
@@ -207,10 +207,10 @@ const LoginPage = ({ onLogin }) => {
           {/* Footer Info */}
           <Box textAlign="center">
             <Text fontSize="xs" color="gray.500">
-              Secure access for authorized insurance companies
+              Secure access 
             </Text>
             <Text fontSize="xs" color="gray.400" mt={1}>
-              © 2026 Claim Verification System. All rights reserved.
+              © 2026 Authenq AI All rights reserved.
             </Text>
           </Box>
         </VStack>

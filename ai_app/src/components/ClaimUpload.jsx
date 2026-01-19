@@ -175,7 +175,7 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
           >
             <Box>
               <Heading size={{ base: "md", md: "lg" }} color="gray.900">
-                Claim Verification System
+                Authenq AI
               </Heading>
               <Text color="gray.600" fontSize={{ base: "xs", md: "sm" }} mt={1}>
                 Automated image & video authenticity analysis
