@@ -69,6 +69,20 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
       return
     }
 
+    // Check file sizes
+    const maxSize = 10 * 1024 * 1024 // 10MB in bytes
+    const oversizedFiles = files.filter(file => file.size > maxSize)
+    
+    if (oversizedFiles.length > 0) {
+      toast({
+        title: 'File size exceeded',
+        description: `Each video must be less than 10MB. ${oversizedFiles.length} file(s) exceeded this limit.`,
+        status: 'error',
+        duration: 3000,
+      })
+      return
+    }
+
     const newVideos = files.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
