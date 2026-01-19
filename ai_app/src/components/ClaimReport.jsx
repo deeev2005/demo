@@ -324,6 +324,19 @@ const ClaimReport = ({ data, onReset }) => {
     return cleaned.trim()
   }
 
+  const getImageGeneratorFromDetails = (failedLayer) => {
+    if (!failedLayer || !failedLayer.reason) return null
+    
+    const reason = failedLayer.reason.toLowerCase()
+    if (reason.includes('midjourney')) return 'Midjourney'
+    if (reason.includes('dall-e') || reason.includes('dalle')) return 'DALL-E'
+    if (reason.includes('stable diffusion')) return 'Stable Diffusion'
+    if (reason.includes('firefly')) return 'Adobe Firefly'
+    if (reason.includes('leonardo')) return 'Leonardo AI'
+    
+    return null
+  }
+
   const formatImageExportDetails = (item) => {
     const failedLayer = getFailedLayerInfo(item.layerResults)
     
@@ -349,11 +362,9 @@ const ClaimReport = ({ data, onReset }) => {
       details.push(`Probability Level: ${failedLayer.confidence}`)
     }
     
-    if (failedLayer.reason) {
-      const cleanedReason = cleanReasonText(failedLayer.reason)
-      if (cleanedReason) {
-        details.push(`Detection: ${cleanedReason}`)
-      }
+    const generator = getImageGeneratorFromDetails(failedLayer)
+    if (generator) {
+      details.push(`Appears to be made using ${generator}`)
     }
     
     return details.length > 0 ? '   ' + details.join('\n   ') : '   AI-generated content detected'
@@ -384,14 +395,7 @@ const ClaimReport = ({ data, onReset }) => {
     
     const generator = getGeneratorFromDetails(item.details)
     if (generator) {
-      details.push(`Generator: Appears to be made using ${generator}`)
-    }
-    
-    if (item.details.reason) {
-      const cleanedReason = cleanReasonText(item.details.reason)
-      if (cleanedReason) {
-        details.push(`Detection: ${cleanedReason}`)
-      }
+      details.push(`Appears to be made using ${generator}`)
     }
     
     return details.length > 0 ? '   ' + details.join('\n   ') : '   AI-generated content detected'
@@ -804,14 +808,6 @@ ${formatImageExportDetails(item)}
                                               </Text>
                                             </Box>
                                           )}
-
-                                          {item.details.reason && (
-                                            <Box mt={2} pt={2} borderTop="1px" borderColor="red.200">
-                                              <Text fontSize="xs" color="red.600">
-                                                {cleanReasonText(item.details.reason)}
-                                              </Text>
-                                            </Box>
-                                          )}
                                         </VStack>
                                       </Box>
                                     ) : (
@@ -863,6 +859,7 @@ ${formatImageExportDetails(item)}
                           const imagePreview = imagePreviewMap[item.filename]
                           const failedLayer = getFailedLayerInfo(item.layerResults)
                           const isDigitallyEdited = failedLayer?.verdict === 'Digitally Edited'
+                          const imageGenerator = getImageGeneratorFromDetails(failedLayer)
                           
                           return (
                             <AccordionItem key={idx} border="none" borderBottom="1px" borderColor="gray.100">
@@ -995,10 +992,10 @@ ${formatImageExportDetails(item)}
                                                 </Flex>
                                               )}
 
-                                              {failedLayer.reason && (
+                                              {imageGenerator && (
                                                 <Box mt={2} pt={2} borderTop="1px" borderColor={isDigitallyEdited ? "yellow.200" : "red.200"}>
                                                   <Text fontSize="xs" color={isDigitallyEdited ? "yellow.600" : "red.600"}>
-                                                    {cleanReasonText(failedLayer.reason)}
+                                                    Appears to be made using {imageGenerator}
                                                   </Text>
                                                 </Box>
                                               )}
