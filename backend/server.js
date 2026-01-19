@@ -416,14 +416,14 @@ app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res)
     }
 
     // Enforce maximum file limit
-    if (files.length > 8) {
+    if (files.length > 15) {
       // Clean up all uploaded files
       files.forEach(file => {
         if (fs.existsSync(file.path)) {
           fs.unlinkSync(file.path);
         }
       });
-      return res.status(400).json({ error: 'Maximum 8 files allowed' });
+      return res.status(400).json({ error: 'Maximum 15 files allowed' });
     }
 
     const results = [];
