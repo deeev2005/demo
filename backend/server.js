@@ -401,13 +401,24 @@ async function checkTruthScanLayer(filePath, filename) {
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * 2000));
 
 // Main processing endpoint - NOW WITH JWT AUTHENTICATION
-app.post('/api/analyze-claim', authenticateToken, upload.array('files', 8), async (req, res) => {
+app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res) => {
   try {
     const { claimId, notes } = req.body;
     const files = req.files;
 
     if (!files || files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    // Enforce maximum file limit
+    if (files.length > 8) {
+      // Clean up all uploaded files
+      files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+      return res.status(400).json({ error: 'Maximum 8 files allowed' });
     }
 
     const results = [];
