@@ -111,7 +111,7 @@ const ClaimReport = ({ data, onReset }) => {
   }
 
   const processImages = async (images) => {
-    const IMAGE_API_URL = 'http://localhost:5000'
+    const IMAGE_API_URL = import.meta.env.VITE_IMAGE_API_URL || 'http://localhost:5000'
     
     console.log(`=== Processing ${images.length} images in single batch ===`)
 
@@ -177,7 +177,7 @@ const ClaimReport = ({ data, onReset }) => {
   }
 
   const processVideos = async (videos) => {
-    const VIDEO_API_URL = 'http://localhost:8000'
+    const VIDEO_API_URL = import.meta.env.VITE_VIDEO_API_URL || 'http://localhost:8000'
     
     console.log(`=== Processing ${videos.length} videos in single batch ===`)
 

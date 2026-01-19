@@ -34,7 +34,7 @@ const LoginPage = ({ onLogin }) => {
 
     try {
       // Call your backend login API
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch(`${import.meta.env.VITE_IMAGE_API_URL || 'http://localhost:5000'}/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
