@@ -23,13 +23,25 @@ const PYTHON_CMD = process.platform === 'win32' ? 'python' : 'python3';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRY = '24h'; // Token expires in 24 hours
 
-// SECURE CREDENTIALS with hashed password
-// Password hash for 'Demo123!' using bcrypt
-const DEMO_USER = {
-  email: 'demo@company.com',
-  passwordHash: '$2b$10$rJ8xQKqZ8qvXqY9kZxZ3.OJ4kQX5ZJx8yYqZ5xQZ3kZxZ3.OJ4kQZ', // Demo123!
-  company: 'Demo Insurance Company'
-};
+// SECURE CREDENTIALS from environment variables
+// Support up to 5 user pairs (EMAIL1/PASS1, EMAIL2/PASS2, etc.)
+const VALID_USERS = [];
+
+for (let i = 1; i <= 5; i++) {
+  const email = process.env[`EMAIL${i}`];
+  const password = process.env[`PASS${i}`];
+  
+  // Only add user if both email and password exist
+  if (email && password) {
+    VALID_USERS.push({
+      email: email.trim(),
+      password: password.trim(),
+      company: process.env[`COMPANY${i}`] || `Company ${i}`
+    });
+  }
+}
+
+console.log(`Loaded ${VALID_USERS.length} valid user(s) from environment variables`);
 
 // Middleware to verify JWT token
 function authenticateToken(req, res, next) {
@@ -56,17 +68,10 @@ app.post('/api/login', async (req, res) => {
   console.log('Login attempt:', email);
   
   try {
-    // Check if email matches
-    if (email !== DEMO_USER.email) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
-      });
-    }
-
-    // For demo, we'll accept the plain password directly
-    // In production, you would compare with bcrypt.compare()
-    if (password !== 'Demo123!') {
+    // Find matching user
+    const user = VALID_USERS.find(u => u.email === email && u.password === password);
+    
+    if (!user) {
       return res.status(401).json({
         success: false,
         error: 'Invalid email or password'
@@ -76,8 +81,8 @@ app.post('/api/login', async (req, res) => {
     // Generate JWT token
     const token = jwt.sign(
       { 
-        email: DEMO_USER.email,
-        company: DEMO_USER.company
+        email: user.email,
+        company: user.company
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRY }
@@ -86,7 +91,7 @@ app.post('/api/login', async (req, res) => {
     res.json({
       success: true,
       token: token,
-      company: DEMO_USER.company
+      company: user.company
     });
   } catch (error) {
     console.error('Login error:', error);

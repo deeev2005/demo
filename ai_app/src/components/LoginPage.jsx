@@ -137,27 +137,6 @@ const LoginPage = ({ onLogin }) => {
                 </Alert>
               )}
 
-              {/* Demo Credentials Info */}
-              <Box 
-                bg="blue.50" 
-                p={4} 
-                borderRadius="md" 
-                border="1px" 
-                borderColor="blue.200"
-              >
-                <Text fontSize="xs" fontWeight="semibold" color="blue.900" mb={2}>
-                  Demo Credentials:
-                </Text>
-                <VStack align="stretch" spacing={1}>
-                  <Text fontSize="xs" color="blue.700">
-                    Email: <Text as="span" fontFamily="mono">demo@company.com</Text>
-                  </Text>
-                  <Text fontSize="xs" color="blue.700">
-                    Password: <Text as="span" fontFamily="mono">Demo123!</Text>
-                  </Text>
-                </VStack>
-              </Box>
-
               {/* Login Form */}
               <VStack spacing={4}>
                 {/* Email Input */}
@@ -167,7 +146,7 @@ const LoginPage = ({ onLogin }) => {
                   </FormLabel>
                   <Input
                     type="email"
-                    placeholder="demo@company.com"
+                    placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onKeyPress={handleKeyPress}
