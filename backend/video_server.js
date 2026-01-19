@@ -7,7 +7,6 @@ import jwt from 'jsonwebtoken';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
-import ffmpeg from 'fluent-ffmpeg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,32 +60,6 @@ const upload = multer({
   storage: storage,
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
-
-// FFmpeg trimming function that preserves metadata
-function trimVideoFFmpeg(inputPath, outputPath, startTime, endTime) {
-  return new Promise((resolve, reject) => {
-    console.log(`Trimming video: ${startTime}s to ${endTime}s`);
-    
-    ffmpeg(inputPath)
-      .setStartTime(startTime)
-      .setDuration(endTime - startTime)
-      .outputOptions([
-        '-c copy',  // Copy codec without re-encoding (preserves metadata)
-        '-map_metadata 0',  // Preserve all metadata
-        '-avoid_negative_ts make_zero'  // Fix timing issues
-      ])
-      .output(outputPath)
-      .on('end', () => {
-        console.log('Trimming completed successfully');
-        resolve();
-      })
-      .on('error', (err) => {
-        console.error('FFmpeg error:', err);
-        reject(err);
-      })
-      .run();
-  });
-}
 
 // Layer 1: Filename Analysis
 function analyzeFilename(filename) {
@@ -371,32 +344,8 @@ async function checkTruthScanVideoLayer(filePath, filename) {
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * 2000));
 
 // Process single video through 3-layer pipeline
-async function processVideo(file, trimStart, trimEnd) {
-  let processPath = file.path;
-  let trimmedPath = null;
-  
-  // FIXED: Check if trimming is actually needed (both values must be valid and different from 0)
-  const shouldTrim = (
-    trimStart !== undefined && 
-    trimEnd !== undefined && 
-    trimEnd > trimStart &&
-    trimStart >= 0
-  );
-  
-  if (shouldTrim) {
-    trimmedPath = `${file.path}_trimmed${path.extname(file.originalname)}`;
-    try {
-      console.log(`TRIMMING: Start=${trimStart}s, End=${trimEnd}s, Duration=${trimEnd - trimStart}s`);
-      await trimVideoFFmpeg(file.path, trimmedPath, trimStart, trimEnd);
-      processPath = trimmedPath;
-      console.log(`Video trimmed successfully: ${trimStart}s to ${trimEnd}s`);
-    } catch (error) {
-      console.error('Trimming failed:', error);
-      // Continue with original file if trimming fails
-    }
-  } else {
-    console.log(`NO TRIMMING: Using original video (trimStart=${trimStart}, trimEnd=${trimEnd})`);
-  }
+async function processVideo(file) {
+  const processPath = file.path;
   
   const layerResults = [];
   let failedAtLayer = null;
@@ -472,11 +421,6 @@ async function processVideo(file, trimStart, trimEnd) {
     }
   }
   
-  // Clean up trimmed file if it was created
-  if (trimmedPath && fs.existsSync(trimmedPath)) {
-    fs.unlinkSync(trimmedPath);
-  }
-  
   const finalStatus = authenticity === 'Likely Genuine' ? 'PASSED' : 'FAILED';
   
   return {
@@ -497,13 +441,10 @@ app.post('/api/verify-video', authenticateToken, upload.single('file'), async (r
       return res.status(400).json({ error: 'No video file uploaded' });
     }
     
-    const trimStart = req.body.trimStart ? parseFloat(req.body.trimStart) : undefined;
-    const trimEnd = req.body.trimEnd ? parseFloat(req.body.trimEnd) : undefined;
-    
-    console.log(`Received video: ${req.file.originalname}, trimStart=${trimStart}, trimEnd=${trimEnd}`);
+    console.log(`Received video: ${req.file.originalname}`);
     
     const claimId = randomUUID().substring(0, 8);
-    const result = await processVideo(req.file, trimStart, trimEnd);
+    const result = await processVideo(req.file);
     
     // Clean up uploaded file
     if (fs.existsSync(req.file.path)) {
@@ -537,12 +478,7 @@ app.post('/api/verify-batch', authenticateToken, upload.array('files', 10), asyn
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       
-      // Parse trim data if provided
-      const trimData = req.body[`trim_${i}`] ? JSON.parse(req.body[`trim_${i}`]) : {};
-      const trimStart = trimData.start;
-      const trimEnd = trimData.end;
-      
-      const result = await processVideo(file, trimStart, trimEnd);
+      const result = await processVideo(file);
       results.push(result);
       
       if (result.authenticity === 'AI Generated') {
@@ -604,7 +540,7 @@ app.get('/', (req, res) => {
     message: 'Video Verification API', 
     version: '1.0.0',
     status: 'running',
-    truthscanLayer: 'ACTIVE - Direct Video Upload with Server-Side Trimming',
+    truthscanLayer: 'ACTIVE - Direct Video Upload',
     authentication: 'JWT Required'
   });
 });
@@ -613,5 +549,4 @@ app.listen(PORT, () => {
   console.log(`Video verification server running on http://localhost:${PORT}`);
   console.log(`JWT Authentication: ENABLED`);
   console.log(`TruthScan Layer 3 is ACTIVE for videos (Direct Upload)`);
-  console.log(`Server-side FFmpeg trimming enabled`);
 });
