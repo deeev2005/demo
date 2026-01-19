@@ -17,14 +17,12 @@ import {
   Badge
 } from '@chakra-ui/react'
 import { FiUpload, FiX, FiPlay } from 'react-icons/fi'
-import VideoTrimmer from './VideoTrimmer'
 
 const ClaimUpload = ({ onSubmit, onLogout }) => {
   const [claimId, setClaimId] = useState('')
   const [notes, setNotes] = useState('')
   const [images, setImages] = useState([])
   const [videos, setVideos] = useState([])
-  const [selectedVideo, setSelectedVideo] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const toast = useToast()
   const imageInputRef = useRef(null)
@@ -32,12 +30,12 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files)
-    const remaining = 6 - images.length
+    const remaining = 15 - images.length
 
     if (files.length > remaining) {
       toast({
         title: 'Upload limit exceeded',
-        description: `Maximum 6 images allowed. You can add ${remaining} more.`,
+        description: `Maximum 15 images allowed. You can add ${remaining} more.`,
         status: 'warning',
         duration: 3000,
       })
@@ -59,12 +57,12 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
 
   const handleVideoUpload = (e) => {
     const files = Array.from(e.target.files)
-    const remaining = 2 - videos.length
+    const remaining = 5 - videos.length
 
     if (files.length > remaining) {
       toast({
         title: 'Upload limit exceeded',
-        description: `Maximum 2 videos allowed. You can add ${remaining} more.`,
+        description: `Maximum 5 videos allowed. You can add ${remaining} more.`,
         status: 'warning',
         duration: 3000,
       })
@@ -77,10 +75,7 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
       name: file.name,
       size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
       preview: URL.createObjectURL(file),
-      type: 'video',
-      isTrimmed: false,
-      trimStart: 0,
-      trimEnd: 0
+      type: 'video'
     }))
 
     setVideos([...videos, ...newVideos])
@@ -97,29 +92,6 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
     const vid = videos.find(v => v.id === id)
     if (vid) URL.revokeObjectURL(vid.preview)
     setVideos(videos.filter(v => v.id !== id))
-  }
-
-  const handleVideoTrim = (videoId, trimData) => {
-    const updatedVideos = videos.map(v => {
-      if (v.id === videoId) {
-        return {
-          ...v,
-          isTrimmed: true,
-          trimStart: trimData.trimStart,
-          trimEnd: trimData.trimEnd
-        }
-      }
-      return v
-    })
-    
-    setVideos(updatedVideos)
-    
-    toast({
-      title: 'Trim points saved',
-      description: 'Video will be trimmed during processing on server',
-      status: 'success',
-      duration: 2000,
-    })
   }
 
   const handleSubmit = async () => {
@@ -230,11 +202,11 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
               <Text fontSize={{ base: "xs", md: "sm" }} fontWeight="medium" color="gray.700" mb={2}>
                 Claim Images{' '}
                 <Text as="span" color="gray.500" fontWeight="normal">
-                  ({images.length}/6)
+                  ({images.length}/15)
                 </Text>
               </Text>
 
-              {images.length < 6 && (
+              {images.length < 15 && (
                 <Box
                   border="2px dashed"
                   borderColor="gray.300"
@@ -251,7 +223,7 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
                     Click to upload images
                   </Text>
                   <Text fontSize="xs" color="gray.500">
-                    PNG, JPG up to 10MB each (max 6 images)
+                    PNG, JPG up to 10MB each (max 15 images)
                   </Text>
                   <Input
                     ref={imageInputRef}
@@ -312,11 +284,11 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
               <Text fontSize={{ base: "xs", md: "sm" }} fontWeight="medium" color="gray.700" mb={2}>
                 Claim Videos{' '}
                 <Text as="span" color="gray.500" fontWeight="normal">
-                  (Optional) ({videos.length}/2)
+                  (Optional) ({videos.length}/5)
                 </Text>
               </Text>
 
-              {videos.length < 2 && (
+              {videos.length < 5 && (
                 <Box
                   border="2px dashed"
                   borderColor="gray.300"
@@ -333,7 +305,7 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
                     Click to upload videos
                   </Text>
                   <Text fontSize="xs" color="gray.500">
-                    MP4, MOV up to 10MB each (max 2 videos)
+                    MP4, MOV up to 10MB each (max 5 videos)
                   </Text>
                   <Input
                     ref={videoInputRef}
@@ -361,17 +333,7 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
                       justify="space-between"
                       align="center"
                     >
-                      <HStack
-                        spacing={{ base: 2, md: 3 }}
-                        flex={1}
-                        cursor={isSubmitting ? 'not-allowed' : 'pointer'}
-                        onClick={() => !isSubmitting && setSelectedVideo(vid)}
-                        _hover={!isSubmitting ? { bg: 'gray.100' } : {}}
-                        p={{ base: 2, md: 3 }}
-                        m={{ base: -2, md: -3 }}
-                        borderRadius="md"
-                        opacity={isSubmitting ? 0.5 : 1}
-                      >
+                      <HStack spacing={{ base: 2, md: 3 }}>
                         <Flex
                           boxSize={{ base: "40px", md: "48px" }}
                           bg="gray.200"
@@ -385,14 +347,7 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
                           <Text fontSize={{ base: "xs", md: "sm" }} fontWeight="medium" color="gray.900" noOfLines={1}>
                             {vid.name}
                           </Text>
-                          <HStack spacing={2} flexWrap="wrap">
-                            <Text fontSize="xs" color="gray.500">{vid.size}</Text>
-                            {vid.isTrimmed && (
-                              <Badge colorScheme="blue" fontSize="xs">
-                                Will trim: {vid.trimStart.toFixed(1)}s - {vid.trimEnd.toFixed(1)}s
-                              </Badge>
-                            )}
-                          </HStack>
+                          <Text fontSize="xs" color="gray.500">{vid.size}</Text>
                         </Box>
                       </HStack>
                       <IconButton
@@ -443,18 +398,6 @@ const ClaimUpload = ({ onSubmit, onLogout }) => {
           </VStack>
         </Box>
       </Container>
-
-      {/* Video Trimmer Modal */}
-      {selectedVideo && !isSubmitting && (
-        <VideoTrimmer
-          video={selectedVideo}
-          onClose={() => setSelectedVideo(null)}
-          onApply={(trimData) => {
-            handleVideoTrim(selectedVideo.id, trimData)
-            setSelectedVideo(null)
-          }}
-        />
-      )}
     </>
   )
 }
