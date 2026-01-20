@@ -88,20 +88,15 @@ function analyzeFilename(filename) {
       return {
         passed: false,
         layer: 1,
-        name: 'Filename Analysis',
-        reason: `${details.generator} naming pattern detected in filename`,
         generator: details.generator,
-        confidence: details.confidence,
-        indicators: [`Pattern "${pattern}" found in filename`]
+        confidence: details.confidence
       };
     }
   }
   
   return {
     passed: true,
-    layer: 1,
-    name: 'Filename Analysis',
-    indicators: ['No AI generator pattern found in filename']
+    layer: 1
   };
 }
 
@@ -110,7 +105,6 @@ function analyzeMetadata(filePath, filename) {
   try {
     const buffer = fs.readFileSync(filePath);
     const text = buffer.toString('utf8', 0, Math.min(buffer.length, 50000));
-    const indicators = [];
     
     // Runway ML Detection (C2PA Standard)
     if ((text.includes('RunwayML') || text.includes('Runway')) &&
@@ -119,17 +113,8 @@ function analyzeMetadata(filePath, filename) {
       return {
         passed: false,
         layer: 2,
-        name: 'Metadata Analysis',
-        reason: 'Runway ML Video Generation detected with C2PA provenance',
         generator: 'Runway ML',
-        confidence: 'very high',
-        indicators: [
-          'RunwayML Video Generation detected',
-          'C2PA provenance standard present',
-          'JUMBF metadata structure detected',
-          'Digital Source Type: trainedAlgorithmicMedia',
-          'Cryptographic content signatures present'
-        ]
+        confidence: 'very high'
       };
     }
     
@@ -137,26 +122,11 @@ function analyzeMetadata(filePath, filename) {
     if (text.includes('AIGC') && 
         (text.includes('MiniMax') || text.includes('minimax')) &&
         text.includes('ContentProducer')) {
-      const indicatorsList = [
-        'AIGC (AI Generated Content) field detected',
-        'ContentProducer: MiniMax',
-        'Chinese TC260PG standard for AI content marking',
-        'Cryptographic signatures present'
-      ];
-      
-      const produceIdMatch = text.match(/ProduceID['":\s]+(\d+)/);
-      if (produceIdMatch) {
-        indicatorsList.push(`Production ID: ${produceIdMatch[1]}`);
-      }
-      
       return {
         passed: false,
         layer: 2,
-        name: 'Metadata Analysis',
-        reason: 'Hailuo MiniMax AI generation signatures detected',
         generator: 'Hailuo MiniMax',
-        confidence: 'very high',
-        indicators: indicatorsList
+        confidence: 'very high'
       };
     }
     
@@ -168,15 +138,8 @@ function analyzeMetadata(filePath, filename) {
       return {
         passed: false,
         layer: 2,
-        name: 'Metadata Analysis',
-        reason: 'OpenAI Sora project identifiers detected',
         generator: 'OpenAI Sora',
-        confidence: 'very high',
-        indicators: [
-          'OpenAI project identifiers detected',
-          'Adobe After Effects project file reference found',
-          'OAICA project code detected'
-        ]
+        confidence: 'very high'
       };
     }
     
@@ -184,77 +147,40 @@ function analyzeMetadata(filePath, filename) {
     if (text.includes('iPhone') && 
         (text.includes('back camera') || text.includes('Lens Model')) &&
         text.includes('GPS Coordinates')) {
-      const indicatorsList = [
-        'GPS location data present',
-        'Apple QuickTime format',
-        'Physical camera metadata detected'
-      ];
-      
       const iphoneMatch = text.match(/iPhone \d+/);
-      if (iphoneMatch) {
-        indicatorsList.push(`Device: ${iphoneMatch[0]}`);
-      }
-      
-      const lensMatch = text.match(/iPhone \d+ back camera [\d.]+mm f\/[\d.]+/);
-      if (lensMatch) {
-        indicatorsList.push(`Lens: ${lensMatch[0]}`);
-      }
       
       return {
         passed: true,
         layer: 2,
-        name: 'Metadata Analysis',
         device: iphoneMatch ? iphoneMatch[0] : 'iPhone',
         sourceType: 'Real Camera Footage',
-        confidence: 'very high',
-        indicators: indicatorsList
+        confidence: 'very high'
       };
     }
     
     // Android Phone Detection
     if (text.includes('Android Version') && 
         text.includes('Android Capture FPS')) {
-      const indicatorsList = [
-        'Android device metadata detected',
-        'Physical camera capture settings present'
-      ];
-      
       const androidMatch = text.match(/Android Version.*?(\d+)/);
-      if (androidMatch) {
-        indicatorsList.push(`Android Version: ${androidMatch[1]}`);
-      }
-      
-      const fpsMatch = text.match(/Android Capture FPS.*?(\d+)/);
-      if (fpsMatch) {
-        indicatorsList.push(`Capture FPS: ${fpsMatch[1]}`);
-      }
       
       return {
         passed: true,
         layer: 2,
-        name: 'Metadata Analysis',
         device: androidMatch ? `Android ${androidMatch[1]}` : 'Android',
         sourceType: 'Real Camera Footage',
-        confidence: 'very high',
-        indicators: indicatorsList
+        confidence: 'very high'
       };
     }
     
     // No distinctive metadata found
     return {
       passed: true,
-      layer: 2,
-      name: 'Metadata Analysis',
-      indicators: ['No distinctive AI or camera metadata found'],
-      note: 'Proceeding to final verification layer'
+      layer: 2
     };
   } catch (error) {
     return {
       passed: true,
-      layer: 2,
-      name: 'Metadata Analysis',
-      indicators: ['Metadata analysis completed'],
-      note: 'Standard metadata check performed'
+      layer: 2
     };
   }
 }
@@ -309,19 +235,16 @@ async function checkTruthScanVideoLayer(filePath, filename) {
             passed: false,
             isAI: true,
             layer: 3,
-            name: 'TruthScan Deep Analysis',
             verdict: result.verdict,
             aiPercentage: result.ai_percentage,
             humanPercentage: result.human_percentage,
-            confidence: result.confidence,
-            reason: `TruthScan detected AI generation with ${result.ai_percentage}% AI probability`
+            confidence: result.confidence
           });
         } else {
           resolve({
             passed: true,
             isAI: false,
             layer: 3,
-            name: 'TruthScan Deep Analysis',
             verdict: result.verdict,
             aiPercentage: result.ai_percentage,
             humanPercentage: result.human_percentage,
@@ -347,35 +270,28 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms + Math.rando
 async function processVideo(file) {
   const processPath = file.path;
   
-  const layerResults = [];
   let failedAtLayer = null;
   let authenticity = 'Unknown';
   let details = {};
   
   // Layer 1: Filename Analysis
   const layer1Result = analyzeFilename(file.originalname);
-  layerResults.push(layer1Result);
   
   if (!layer1Result.passed) {
     failedAtLayer = 1;
     authenticity = 'AI Generated';
     details = {
-      layerName: layer1Result.name,
-      reason: layer1Result.reason,
       generator: layer1Result.generator,
       confidence: layer1Result.confidence
     };
   } else {
     // Layer 2: Metadata Analysis
     const layer2Result = analyzeMetadata(processPath, file.originalname);
-    layerResults.push(layer2Result);
     
     if (!layer2Result.passed) {
       failedAtLayer = 2;
       authenticity = 'AI Generated';
       details = {
-        layerName: layer2Result.name,
-        reason: layer2Result.reason,
         generator: layer2Result.generator,
         confidence: layer2Result.confidence
       };
@@ -395,14 +311,11 @@ async function processVideo(file) {
         await delay(3000);
         
         const layer3Result = await checkTruthScanVideoLayer(processPath, file.originalname);
-        layerResults.push(layer3Result);
         
         if (!layer3Result.passed) {
           failedAtLayer = 3;
           authenticity = 'AI Generated';
           details = {
-            layerName: layer3Result.name,
-            reason: layer3Result.reason || 'AI content detected',
             verdict: layer3Result.verdict,
             aiPercentage: layer3Result.aiPercentage,
             humanPercentage: layer3Result.humanPercentage,
@@ -428,13 +341,7 @@ async function processVideo(file) {
     size: file.size,
     authenticity,
     finalStatus,
-    details: {
-      verdict: details.verdict || (authenticity === 'AI Generated' ? 'AI Generated' : 'Likely Genuine'),
-      aiPercentage: details.aiPercentage,
-      humanPercentage: details.humanPercentage,
-      confidence: details.confidence,
-      generator: details.generator
-    }
+    details
   };
 }
 
