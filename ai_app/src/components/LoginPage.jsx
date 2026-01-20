@@ -125,7 +125,7 @@ const LoginPage = ({ onLogin }) => {
                   Welcome Back
                 </Heading>
                 <Text color="gray.600" fontSize="sm">
-                  Sign in to access your Authentic AI dashboard
+                  Sign in to access your Authentic AI Demo dashboard
                 </Text>
               </Box>
 
