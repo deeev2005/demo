@@ -17,8 +17,29 @@ const PORT = 8000;
 // Detect Python command (Windows uses 'python', Unix uses 'python3')
 const PYTHON_CMD = process.platform === 'win32' ? 'python' : 'python3';
 
-// JWT SECRET - Must match the image server
+// JWT SECRET - In production, use environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_EXPIRY = '24h'; // Token expires in 24 hours
+
+// SECURE CREDENTIALS from environment variables
+// Support up to 5 user pairs (EMAIL1/PASS1, EMAIL2/PASS2, etc.)
+const VALID_USERS = [];
+
+for (let i = 1; i <= 5; i++) {
+  const email = process.env[`EMAIL${i}`];
+  const password = process.env[`PASS${i}`];
+  
+  // Only add user if both email and password exist
+  if (email && password) {
+    VALID_USERS.push({
+      email: email.trim(),
+      password: password.trim(),
+      company: process.env[`COMPANY${i}`] || `Company ${i}`
+    });
+  }
+}
+
+console.log(`Loaded ${VALID_USERS.length} valid user(s) from environment variables`);
 
 // CORS configuration
 app.use(cors());
@@ -41,6 +62,47 @@ function authenticateToken(req, res, next) {
     next();
   });
 }
+
+// LOGIN ENDPOINT with JWT
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  
+  console.log('Login attempt:', email);
+  
+  try {
+    // Find matching user
+    const user = VALID_USERS.find(u => u.email === email && u.password === password);
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        email: user.email,
+        company: user.company
+      },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRY }
+    );
+    
+    res.json({
+      success: true,
+      token: token,
+      company: user.company
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Login failed'
+    });
+  }
+});
 
 // Configure multer for file uploads with disk storage (needed for Python script)
 const storage = multer.diskStorage({
@@ -434,7 +496,7 @@ async function processVideo(file) {
   };
 }
 
-// Single video verification endpoint - NOW WITH JWT AUTHENTICATION
+// Single video verification endpoint - WITH JWT AUTHENTICATION
 app.post('/api/verify-video', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -463,7 +525,7 @@ app.post('/api/verify-video', authenticateToken, upload.single('file'), async (r
   }
 });
 
-// Batch video verification endpoint - NOW WITH JWT AUTHENTICATION
+// Batch video verification endpoint - WITH JWT AUTHENTICATION
 app.post('/api/verify-batch', authenticateToken, upload.array('files', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -548,5 +610,6 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Video verification server running on http://localhost:${PORT}`);
   console.log(`JWT Authentication: ENABLED`);
+  console.log(`Loaded ${VALID_USERS.length} valid user(s)`);
   console.log(`TruthScan Layer 3 is ACTIVE for videos (Direct Upload)`);
 });
