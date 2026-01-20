@@ -360,7 +360,8 @@ async function processVideo(file) {
     failedAtLayer = 1;
     authenticity = 'AI Generated';
     details = {
-      verdict: 'AI Generated',
+      layerName: layer1Result.name,
+      reason: layer1Result.reason,
       generator: layer1Result.generator,
       confidence: layer1Result.confidence
     };
@@ -373,7 +374,8 @@ async function processVideo(file) {
       failedAtLayer = 2;
       authenticity = 'AI Generated';
       details = {
-        verdict: 'AI Generated',
+        layerName: layer2Result.name,
+        reason: layer2Result.reason,
         generator: layer2Result.generator,
         confidence: layer2Result.confidence
       };
@@ -382,7 +384,9 @@ async function processVideo(file) {
       if (layer2Result.sourceType === 'Real Camera Footage') {
         authenticity = 'Likely Genuine';
         details = {
-          verdict: 'Likely Genuine',
+          verdict: 'Real camera footage detected',
+          device: layer2Result.device,
+          sourceType: layer2Result.sourceType,
           confidence: layer2Result.confidence
         };
       } else {
@@ -397,6 +401,8 @@ async function processVideo(file) {
           failedAtLayer = 3;
           authenticity = 'AI Generated';
           details = {
+            layerName: layer3Result.name,
+            reason: layer3Result.reason || 'AI content detected',
             verdict: layer3Result.verdict,
             aiPercentage: layer3Result.aiPercentage,
             humanPercentage: layer3Result.humanPercentage,
@@ -422,13 +428,9 @@ async function processVideo(file) {
     size: file.size,
     authenticity,
     finalStatus,
-    details: {
-      verdict: details.verdict || (authenticity === 'AI Generated' ? 'AI Generated' : 'Likely Genuine'),
-      aiPercentage: details.aiPercentage,
-      humanPercentage: details.humanPercentage,
-      confidence: details.confidence,
-      generator: details.generator
-    }
+    failedAtLayer,
+    layerResults,
+    details
   };
 }
 
@@ -519,6 +521,8 @@ app.post('/api/verify-batch', authenticateToken, upload.array('files', 10), asyn
       riskScore,
       confidence,
       fileCount: req.files.length,
+      videoCount: req.files.length,
+      imageCount: 0,
       aiDetectedCount,
       genuineCount,
       results,
