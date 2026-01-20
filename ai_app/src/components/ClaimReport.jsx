@@ -55,8 +55,17 @@ const ClaimReport = ({ data, onReset }) => {
   const [videoResults, setVideoResults] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const hasProcessedRef = useRef(false)
+  const currentClaimIdRef = useRef(null)
 
   useEffect(() => {
+    // Reset if it's a new claim
+    if (data && data.claimId !== currentClaimIdRef.current) {
+      hasProcessedRef.current = false
+      currentClaimIdRef.current = data.claimId
+      setImageResults(null)
+      setVideoResults(null)
+    }
+
     if (data && data.isProcessing && !hasProcessedRef.current) {
       hasProcessedRef.current = true
       setIsProcessing(true)
@@ -127,16 +136,21 @@ const ClaimReport = ({ data, onReset }) => {
       // GET JWT TOKEN FROM localStorage
       const token = localStorage.getItem('authToken')
 
+      if (!token) {
+        throw new Error('Authentication token not found. Please login again.')
+      }
+
       const response = await fetch(`${IMAGE_API_URL}/api/analyze-claim`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`  // ADD JWT TOKEN HERE
+          'Authorization': `Bearer ${token}`
         },
         body: formData,
       })
 
       if (!response.ok) {
-        throw new Error('Image verification failed')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error: ${response.status}`)
       }
 
       const result = await response.json()
@@ -173,6 +187,13 @@ const ClaimReport = ({ data, onReset }) => {
           [image.id]: { status: 'error' }
         }))
       })
+      
+      toast({
+        title: 'Image processing failed',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+      })
     }
   }
 
@@ -191,16 +212,21 @@ const ClaimReport = ({ data, onReset }) => {
       // GET JWT TOKEN FROM localStorage
       const token = localStorage.getItem('authToken')
 
+      if (!token) {
+        throw new Error('Authentication token not found. Please login again.')
+      }
+
       const response = await fetch(`${VIDEO_API_URL}/api/verify-batch`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`  // ADD JWT TOKEN HERE
+          'Authorization': `Bearer ${token}`
         },
         body: formData,
       })
 
       if (!response.ok) {
-        throw new Error('Video verification failed')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error: ${response.status}`)
       }
 
       const result = await response.json()
@@ -233,6 +259,13 @@ const ClaimReport = ({ data, onReset }) => {
           ...prev,
           [video.id]: { status: 'error' }
         }))
+      })
+      
+      toast({
+        title: 'Video processing failed',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
       })
     }
   }
