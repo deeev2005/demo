@@ -147,9 +147,9 @@ function checkFilenameLayer(filename) {
         passed: false, 
         isAI: true, 
         layer: 1,
-        layerName: ' Detection',
+        layerName: 'Filename Pattern Detection',
         model: name,
-        reason: ` Contains AI generator pattern: ${name}`
+        reason: `Filename contains AI generator pattern: ${name}`
       };
     }
   }
@@ -189,14 +189,14 @@ async function checkMetadataLayer(filePath, filename) {
         detection.isAI = true;
         detection.generator = 'Grok AI (X/xAI)';
         detection.sourceType = 'Grok AI Generated';
-        detection.indicators.push('Grok AI  detected');
+        detection.indicators.push('Grok AI metadata detected');
         break;
       }
     }
 
     // Check for XMP Toolkit
     if (text.includes('XMP Toolkit') || text.includes('Adobe XMP Core')) {
-      detection.indicators.push(' present');
+      detection.indicators.push('XMP metadata present');
     }
 
     // Check for Screenshots
@@ -296,11 +296,11 @@ async function checkMetadataLayer(filePath, filename) {
         passed: false,
         isAI: true,
         layer: 2,
-        layerName: ' Analysis',
+        layerName: 'Metadata Analysis',
         generator: detection.generator,
         sourceType: detection.sourceType,
         indicators: detection.indicators,
-        reason: `AI-generated  detected: ${detection.generator || 'Unknown Generator'}`
+        reason: `AI-generated metadata detected: ${detection.generator || 'Unknown Generator'}`
       };
     }
 
@@ -314,7 +314,7 @@ async function checkMetadataLayer(filePath, filename) {
     };
 
   } catch (error) {
-    console.error(' analysis error:', error);
+    console.error('Metadata analysis error:', error);
     return { passed: true, error: error.message };
   }
 }
@@ -322,7 +322,7 @@ async function checkMetadataLayer(filePath, filename) {
 // Layer 3: TruthScan Analysis
 async function checkTruthScanLayer(filePath, filename) {
   return new Promise((resolve, reject) => {
-    console.log(`Starting  analysis for: ${filename}`);
+    console.log(`Starting TruthScan analysis for: ${filename}`);
     
     const pythonScriptPath = path.join(__dirname, 'scripts', 'truthscan_analyzer.py');
     const python = spawn(PYTHON_CMD, [pythonScriptPath, filePath]);
@@ -345,7 +345,7 @@ async function checkTruthScanLayer(filePath, filename) {
         console.error(`Error output: ${errorString}`);
         resolve({
           passed: true,
-          error: ` analysis failed: ${errorString || 'Unknown error'}`
+          error: `TruthScan analysis failed: ${errorString || 'Unknown error'}`
         });
         return;
       }
@@ -353,12 +353,12 @@ async function checkTruthScanLayer(filePath, filename) {
       try {
         const result = JSON.parse(dataString);
         
-        console.log(` result for ${filename}:`, result);
+        console.log(`TruthScan result for ${filename}:`, result);
         
         if (!result.success) {
           resolve({
             passed: true,
-            error: result.error || ' analysis incomplete'
+            error: result.error || 'TruthScan analysis incomplete'
           });
           return;
         }
@@ -368,7 +368,7 @@ async function checkTruthScanLayer(filePath, filename) {
             passed: false,
             isAI: true,
             layer: 3,
-            layerName: ' Deep Analysis',
+            layerName: 'TruthScan Deep Analysis',
             verdict: result.verdict,
             aiPercentage: result.ai_percentage,
             humanPercentage: result.human_percentage,
@@ -377,7 +377,7 @@ async function checkTruthScanLayer(filePath, filename) {
             analysis: result.analysis,
             metadata: result.metadata,
             detectionStep: result.detection_step,
-            reason: ` detected AI generation with ${result.ai_percentage}% AI probability`
+            reason: `TruthScan detected AI generation with ${result.ai_percentage}% AI probability`
           });
         } else {
           resolve({
@@ -394,11 +394,11 @@ async function checkTruthScanLayer(filePath, filename) {
           });
         }
       } catch (error) {
-        console.error('Failed to parse  output:', error);
+        console.error('Failed to parse TruthScan output:', error);
         console.error('Raw output:', dataString);
         resolve({
           passed: true,
-          error: `Failed to parse  results: ${error.message}`
+          error: `Failed to parse TruthScan results: ${error.message}`
         });
       }
     });
@@ -450,7 +450,7 @@ app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res)
       const layer1Result = checkFilenameLayer(file.originalname);
       fileResult.layerResults.push({
         layer: 1,
-        name: ' Detection',
+        name: 'Filename Pattern Detection',
         ...layer1Result
       });
 
@@ -471,7 +471,7 @@ app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res)
       const layer2Result = await checkMetadataLayer(file.path, file.originalname);
       fileResult.layerResults.push({
         layer: 2,
-        name: ' Analysis',
+        name: 'Metadata Analysis',
         ...layer2Result
       });
 
@@ -494,7 +494,7 @@ app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res)
       const layer3Result = await checkTruthScanLayer(file.path, file.originalname);
       fileResult.layerResults.push({
         layer: 3,
-        name: ' Deep Analysis',
+        name: 'TruthScan Deep Analysis',
         ...layer3Result
       });
 

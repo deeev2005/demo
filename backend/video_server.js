@@ -150,11 +150,11 @@ function analyzeFilename(filename) {
       return {
         passed: false,
         layer: 1,
-        name: ' Analysis',
-        reason: `${details.generator}  detected `,
+        name: 'Filename Analysis',
+        reason: `${details.generator} naming pattern detected in filename`,
         generator: details.generator,
         confidence: details.confidence,
-        indicators: [` "${pattern}" found  `]
+        indicators: [`Pattern "${pattern}" found in filename`]
       };
     }
   }
@@ -162,8 +162,8 @@ function analyzeFilename(filename) {
   return {
     passed: true,
     layer: 1,
-    name: ' Analysis',
-    indicators: ['No AI generator  found']
+    name: 'Filename Analysis',
+    indicators: ['No AI generator pattern found in filename']
   };
 }
 
@@ -181,7 +181,7 @@ function analyzeMetadata(filePath, filename) {
       return {
         passed: false,
         layer: 2,
-        name: ' Analysis',
+        name: 'Metadata Analysis',
         reason: 'Runway ML Video Generation detected with C2PA provenance',
         generator: 'Runway ML',
         confidence: 'very high',
@@ -214,7 +214,7 @@ function analyzeMetadata(filePath, filename) {
       return {
         passed: false,
         layer: 2,
-        name: ' Analysis',
+        name: 'Metadata Analysis',
         reason: 'Hailuo MiniMax AI generation signatures detected',
         generator: 'Hailuo MiniMax',
         confidence: 'very high',
@@ -230,7 +230,7 @@ function analyzeMetadata(filePath, filename) {
       return {
         passed: false,
         layer: 2,
-        name: ' Analysis',
+        name: 'Metadata Analysis',
         reason: 'OpenAI Sora project identifiers detected',
         generator: 'OpenAI Sora',
         confidence: 'very high',
@@ -265,7 +265,7 @@ function analyzeMetadata(filePath, filename) {
       return {
         passed: true,
         layer: 2,
-        name: ' Analysis',
+        name: 'Metadata Analysis',
         device: iphoneMatch ? iphoneMatch[0] : 'iPhone',
         sourceType: 'Real Camera Footage',
         confidence: 'very high',
@@ -277,7 +277,7 @@ function analyzeMetadata(filePath, filename) {
     if (text.includes('Android Version') && 
         text.includes('Android Capture FPS')) {
       const indicatorsList = [
-        'Android device  detected',
+        'Android device metadata detected',
         'Physical camera capture settings present'
       ];
       
@@ -294,7 +294,7 @@ function analyzeMetadata(filePath, filename) {
       return {
         passed: true,
         layer: 2,
-        name: ' Analysis',
+        name: 'Metadata Analysis',
         device: androidMatch ? `Android ${androidMatch[1]}` : 'Android',
         sourceType: 'Real Camera Footage',
         confidence: 'very high',
@@ -306,17 +306,17 @@ function analyzeMetadata(filePath, filename) {
     return {
       passed: true,
       layer: 2,
-      name: ' Analysis',
-      indicators: ['No distinctive AI or camera  found'],
+      name: 'Metadata Analysis',
+      indicators: ['No distinctive AI or camera metadata found'],
       note: 'Proceeding to final verification layer'
     };
   } catch (error) {
     return {
       passed: true,
       layer: 2,
-      name: ' Analysis',
-      indicators: [' analysis completed'],
-      note: 'Standard  check performed'
+      name: 'Metadata Analysis',
+      indicators: ['Metadata analysis completed'],
+      note: 'Standard metadata check performed'
     };
   }
 }
@@ -324,7 +324,7 @@ function analyzeMetadata(filePath, filename) {
 // Layer 3: TruthScan Video Analysis - Direct Video Upload
 async function checkTruthScanVideoLayer(filePath, filename) {
   return new Promise((resolve, reject) => {
-    console.log(` video analysis for: ${filename}`);
+    console.log(`Starting TruthScan video analysis for: ${filename}`);
     
     // Call Python script for video analysis (sends video directly to TruthScan API)
     const pythonScriptPath = path.join(__dirname, 'scripts', 'truthscan_analyzer_video.py');
@@ -348,7 +348,7 @@ async function checkTruthScanVideoLayer(filePath, filename) {
         console.error(`Error output: ${errorString}`);
         resolve({
           passed: true,
-          error: ` video analysis failed: ${errorString || 'Unknown error'}`
+          error: `TruthScan video analysis failed: ${errorString || 'Unknown error'}`
         });
         return;
       }
@@ -356,12 +356,12 @@ async function checkTruthScanVideoLayer(filePath, filename) {
       try {
         const result = JSON.parse(dataString);
         
-        console.log(` video result for ${filename}:`, result);
+        console.log(`TruthScan video result for ${filename}:`, result);
         
         if (!result.success) {
           resolve({
             passed: true,
-            error: result.error || ' analysis incomplete'
+            error: result.error || 'TruthScan analysis incomplete'
           });
           return;
         }
@@ -371,19 +371,19 @@ async function checkTruthScanVideoLayer(filePath, filename) {
             passed: false,
             isAI: true,
             layer: 3,
-            name: ' Deep Analysis',
+            name: 'TruthScan Deep Analysis',
             verdict: result.verdict,
             aiPercentage: result.ai_percentage,
             humanPercentage: result.human_percentage,
             confidence: result.confidence,
-            reason: ` Detected AI generation with ${result.ai_percentage}% AI probability`
+            reason: `TruthScan detected AI generation with ${result.ai_percentage}% AI probability`
           });
         } else {
           resolve({
             passed: true,
             isAI: false,
             layer: 3,
-            name: ' Deep Analysis',
+            name: 'TruthScan Deep Analysis',
             verdict: result.verdict,
             aiPercentage: result.ai_percentage,
             humanPercentage: result.human_percentage,
