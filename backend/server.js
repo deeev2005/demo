@@ -529,6 +529,35 @@ app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res)
     const overallRisk = aiDetectedCount > genuineCount ? 'High' : 
                         aiDetectedCount > 0 ? 'Medium' : 'Low';
 
+    // Sanitize results - remove sensitive IP information
+    const sanitizedResults = results.map(result => {
+      const sanitized = {
+        filename: result.filename,
+        size: result.size,
+        authenticity: result.authenticity
+      };
+
+      // Only include necessary details based on authenticity
+      if (result.authenticity === 'AI Generated' && result.details) {
+        sanitized.details = {
+          verdict: result.details.verdict,
+          aiPercentage: result.details.aiPercentage,
+          humanPercentage: result.details.humanPercentage,
+          confidence: result.details.confidence,
+          generator: result.details.model || result.details.generator,
+          heatmapUrl: result.details.heatmapUrl
+        };
+      } else if (result.authenticity === 'Likely Genuine' && result.details) {
+        sanitized.details = {
+          isScreenshot: result.details.isScreenshot,
+          isCameraPhoto: result.details.isCameraPhoto,
+          deviceInfo: result.details.deviceInfo
+        };
+      }
+
+      return sanitized;
+    });
+
     const response = {
       claimId,
       processedAt: new Date().toISOString(),
@@ -539,7 +568,7 @@ app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res)
       confidence: Math.round((genuineCount / files.length) * 100),
       aiDetectedCount,
       genuineCount,
-      results,
+      results: sanitizedResults,
       notes
     };
 

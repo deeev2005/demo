@@ -428,9 +428,13 @@ async function processVideo(file) {
     size: file.size,
     authenticity,
     finalStatus,
-    failedAtLayer,
-    layerResults,
-    details
+    details: {
+      verdict: details.verdict || (authenticity === 'AI Generated' ? 'AI Generated' : 'Likely Genuine'),
+      aiPercentage: details.aiPercentage,
+      humanPercentage: details.humanPercentage,
+      confidence: details.confidence,
+      generator: details.generator
+    }
   };
 }
 
@@ -521,8 +525,6 @@ app.post('/api/verify-batch', authenticateToken, upload.array('files', 10), asyn
       riskScore,
       confidence,
       fileCount: req.files.length,
-      videoCount: req.files.length,
-      imageCount: 0,
       aiDetectedCount,
       genuineCount,
       results,
