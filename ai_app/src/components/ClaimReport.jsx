@@ -358,7 +358,15 @@ const ClaimReport = ({ data, onReset }) => {
   }
 
   const getImageGeneratorFromDetails = (failedLayer) => {
-    if (!failedLayer || !failedLayer.reason) return null
+    if (!failedLayer) return null
+    
+    // First check if generator field exists (from Layer 2 metadata)
+    if (failedLayer.generator) {
+      return failedLayer.generator
+    }
+    
+    // Then check reason text (from Layer 1 filename detection)
+    if (!failedLayer.reason) return null
     
     const reason = failedLayer.reason.toLowerCase()
     if (reason.includes('midjourney')) return 'Midjourney'
@@ -366,6 +374,10 @@ const ClaimReport = ({ data, onReset }) => {
     if (reason.includes('stable diffusion')) return 'Stable Diffusion'
     if (reason.includes('firefly')) return 'Adobe Firefly'
     if (reason.includes('leonardo')) return 'Leonardo AI'
+    if (reason.includes('gemini')) return 'Gemini'
+    if (reason.includes('grok')) return 'Grok AI'
+    if (reason.includes('flux')) return 'Flux'
+    if (reason.includes('chatgpt') || reason.includes('gpt-4')) return 'ChatGPT/GPT-4'
     
     return null
   }
@@ -785,7 +797,7 @@ ${formatImageExportDetails(item)}
                                     <Box flex={{ base: "1", lg: "0 0 500px" }} w="full" p={4} bg="gray.100" borderRadius="md" border="1px" borderColor="gray.300">
                                       <Text fontSize="sm" color="gray.600" textAlign="center">
                                         Video preview not available
-                                      </Text>
+                                        </Text>
                                     </Box>
                                   )}
                                   <Box flex="1" w="full">
@@ -920,6 +932,11 @@ ${formatImageExportDetails(item)}
                                         <Badge colorScheme="blue" fontSize="xs" display="flex" alignItems="center" gap={1}>
                                           <Icon as={FiCamera} boxSize={3} />
                                           Camera
+                                        </Badge>
+                                      )}
+                                      {imageGenerator && (
+                                        <Badge colorScheme="orange" fontSize="xs">
+                                          {imageGenerator}
                                         </Badge>
                                       )}
                                       <Text fontSize="xs" color="gray.500">

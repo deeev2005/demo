@@ -149,7 +149,7 @@ function checkFilenameLayer(filename) {
         layer: 1,
         layerName: ' Detection',
         model: name,
-        reason: ` Contains AI generator pattern: ${name}`
+        reason: ` Contains AI generator: ${name}`
       };
     }
   }
