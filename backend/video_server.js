@@ -607,6 +607,12 @@ app.get('/', (req, res) => {
   });
 });
 
+// Health Check & Ping
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+app.get('/ping', (req, res) => res.status(200).send('OK'));
+
 app.listen(PORT, () => {
   console.log(`Video verification server running on http://localhost:${PORT}`);
   console.log(`JWT Authentication: ENABLED`);
