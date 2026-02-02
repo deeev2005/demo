@@ -102,18 +102,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Health Check & Ping endpoints
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString() 
-  });
-});
-
-app.get('/ping', (req, res) => {
-  res.status(200).send('OK');
-});
-
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -562,6 +550,12 @@ app.post('/api/analyze-claim', authenticateToken, upload.any(), async (req, res)
     res.status(500).json({ error: error.message });
   }
 });
+
+// Health Check & Ping
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+app.get('/ping', (req, res) => res.status(200).send('OK'));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
