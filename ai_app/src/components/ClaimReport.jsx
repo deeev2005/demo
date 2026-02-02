@@ -30,6 +30,7 @@ import {
   ListIcon
 } from '@chakra-ui/react'
 import { FiCheckCircle, FiXCircle, FiImage, FiVideo, FiDownload, FiMonitor, FiCamera, FiClock, FiInfo } from 'react-icons/fi'
+import jsPDF from 'jspdf'
 
 // Sand clock animation
 const sandClockRotate = keyframes`
@@ -446,63 +447,235 @@ const ClaimReport = ({ data, onReset }) => {
     return details.length > 0 ? '   ' + details.join('\n   ') : '   AI-generated content detected'
   }
 
-  const handleExport = () => {
-    const reportContent = `
-COMBINED CLAIM ANALYSIS REPORT
-====================================
+  const handleExport = async () => {
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      let yPos = 20
+      const pageHeight = pdf.internal.pageSize.height
+      const pageWidth = pdf.internal.pageSize.width
+      const margin = 15
+      const maxWidth = pageWidth - 2 * margin
 
-Claim ID: ${claimId}
-Generated: ${new Date().toLocaleString()}
-${notes ? `Notes: ${notes}\n` : ''}
+      // Helper function to check if we need a new page
+      const checkPageBreak = (requiredSpace) => {
+        if (yPos + requiredSpace > pageHeight - 20) {
+          pdf.addPage()
+          yPos = 20
+          return true
+        }
+        return false
+      }
 
-OVERALL SUMMARY
-------------------------------------
-Total Files: ${totalFiles}
-  - Images: ${imageResults?.fileCount || 0}
-  - Videos: ${videoResults?.fileCount || 0}
-AI Detected: ${totalAI}
-Genuine: ${totalGenuine}
+      // Helper function to convert image URL to base64
+      const getBase64FromUrl = async (url) => {
+        try {
+          const response = await fetch(url)
+          const blob = await response.blob()
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result)
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+        } catch (error) {
+          console.error('Error converting image:', error)
+          return null
+        }
+      }
 
-${videoResults ? `
-VIDEO ANALYSIS
-------------------------------------
-Videos Analyzed: ${videoResults.fileCount}
-AI Detected: ${videoResults.aiDetectedCount}
-Genuine: ${videoResults.genuineCount}
+      // Title
+      pdf.setFontSize(18)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('COMBINED CLAIM ANALYSIS REPORT', margin, yPos)
+      yPos += 10
 
-Detailed Video Results:
-${videoResults.results.map((item, idx) => `
-${idx + 1}. ${item.filename}
-   Status: ${item.authenticity}
-${formatVideoExportDetails(item)}
-`).join('\n')}
-` : ''}
+      // Claim Info
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`Claim ID: ${claimId}`, margin, yPos)
+      yPos += 6
+      pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, yPos)
+      yPos += 6
+      
+      if (notes) {
+        pdf.text(`Notes: ${notes}`, margin, yPos)
+        yPos += 8
+      } else {
+        yPos += 2
+      }
 
-${imageResults ? `
-IMAGE ANALYSIS
-------------------------------------
-Images Analyzed: ${imageResults.fileCount}
-AI Detected: ${imageResults.aiDetectedCount}
-Genuine: ${imageResults.genuineCount}
+      // Overall Summary
+      checkPageBreak(30)
+      pdf.setFontSize(12)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('OVERALL SUMMARY', margin, yPos)
+      yPos += 8
 
-Detailed Image Results:
-${imageResults.results.map((item, idx) => `
-${idx + 1}. ${item.filename}
-   Status: ${item.authenticity}
-${formatImageExportDetails(item)}
-`).join('\n')}
-` : ''}
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`Total Files: ${totalFiles}`, margin, yPos)
+      yPos += 6
+      pdf.text(`  - Images: ${imageResults?.fileCount || 0}`, margin, yPos)
+      yPos += 6
+      pdf.text(`  - Videos: ${videoResults?.fileCount || 0}`, margin, yPos)
+      yPos += 6
+      pdf.text(`AI Detected: ${totalAI}`, margin, yPos)
+      yPos += 6
+      pdf.text(`Genuine: ${totalGenuine}`, margin, yPos)
+      yPos += 12
 
+      // Video Analysis
+      if (videoResults && videoResults.results && videoResults.results.length > 0) {
+        checkPageBreak(30)
+        pdf.setFontSize(12)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('VIDEO ANALYSIS', margin, yPos)
+        yPos += 8
 
+        pdf.setFontSize(10)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(`Videos Analyzed: ${videoResults.fileCount}`, margin, yPos)
+        yPos += 6
+        pdf.text(`AI Detected: ${videoResults.aiDetectedCount}`, margin, yPos)
+        yPos += 6
+        pdf.text(`Genuine: ${videoResults.genuineCount}`, margin, yPos)
+        yPos += 10
 
-`
-    const blob = new Blob([reportContent], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `combined-claim-report-${claimId}-${Date.now()}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Detailed Video Results:', margin, yPos)
+        yPos += 8
+
+        for (let i = 0; i < videoResults.results.length; i++) {
+          const item = videoResults.results[i]
+          checkPageBreak(30)
+
+          pdf.setFont('helvetica', 'bold')
+          pdf.text(`${i + 1}. ${item.filename}`, margin, yPos)
+          yPos += 6
+
+          pdf.setFont('helvetica', 'normal')
+          pdf.text(`   Status: ${item.authenticity}`, margin, yPos)
+          yPos += 6
+
+          const details = formatVideoExportDetails(item)
+          const detailLines = pdf.splitTextToSize(details, maxWidth - 5)
+          detailLines.forEach(line => {
+            checkPageBreak(6)
+            pdf.text(line, margin, yPos)
+            yPos += 6
+          })
+
+          yPos += 4
+        }
+
+        yPos += 6
+      }
+
+      // Image Analysis
+      if (imageResults && imageResults.results && imageResults.results.length > 0) {
+        checkPageBreak(30)
+        pdf.setFontSize(12)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('IMAGE ANALYSIS', margin, yPos)
+        yPos += 8
+
+        pdf.setFontSize(10)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(`Images Analyzed: ${imageResults.fileCount}`, margin, yPos)
+        yPos += 6
+        pdf.text(`AI Detected: ${imageResults.aiDetectedCount}`, margin, yPos)
+        yPos += 6
+        pdf.text(`Genuine: ${imageResults.genuineCount}`, margin, yPos)
+        yPos += 10
+
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Detailed Image Results:', margin, yPos)
+        yPos += 8
+
+        for (let i = 0; i < imageResults.results.length; i++) {
+          const item = imageResults.results[i]
+          const failedLayer = getFailedLayerInfo(item.layerResults)
+          
+          checkPageBreak(80)
+
+          pdf.setFont('helvetica', 'bold')
+          pdf.text(`${i + 1}. ${item.filename}`, margin, yPos)
+          yPos += 6
+
+          pdf.setFont('helvetica', 'normal')
+          pdf.text(`   Status: ${item.authenticity}`, margin, yPos)
+          yPos += 6
+
+          const details = formatImageExportDetails(item)
+          const detailLines = pdf.splitTextToSize(details, maxWidth - 5)
+          detailLines.forEach(line => {
+            checkPageBreak(6)
+            pdf.text(line, margin, yPos)
+            yPos += 6
+          })
+
+          // Add image preview
+          const imagePreview = imagePreviewMap[item.filename]
+          if (imagePreview) {
+            checkPageBreak(60)
+            yPos += 4
+            try {
+              const base64Image = await getBase64FromUrl(imagePreview)
+              if (base64Image) {
+                const imgWidth = 80
+                const imgHeight = 60
+                pdf.addImage(base64Image, 'JPEG', margin, yPos, imgWidth, imgHeight)
+                yPos += imgHeight + 4
+              }
+            } catch (error) {
+              console.error('Error adding image to PDF:', error)
+            }
+          }
+
+          // Add heatmap if available
+          if (failedLayer && failedLayer.heatmapUrl) {
+            checkPageBreak(60)
+            yPos += 4
+            pdf.setFont('helvetica', 'italic')
+            pdf.setFontSize(9)
+            pdf.text('AI Detection Heatmap:', margin, yPos)
+            yPos += 6
+            
+            try {
+              const base64Heatmap = await getBase64FromUrl(failedLayer.heatmapUrl)
+              if (base64Heatmap) {
+                const imgWidth = 80
+                const imgHeight = 60
+                pdf.addImage(base64Heatmap, 'JPEG', margin, yPos, imgWidth, imgHeight)
+                yPos += imgHeight + 4
+              }
+            } catch (error) {
+              console.error('Error adding heatmap to PDF:', error)
+            }
+            pdf.setFontSize(10)
+          }
+
+          yPos += 6
+        }
+      }
+
+      // Save the PDF
+      pdf.save(`combined-claim-report-${claimId}-${Date.now()}.pdf`)
+      
+      toast({
+        title: 'PDF exported successfully',
+        status: 'success',
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      toast({
+        title: 'PDF export failed',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+      })
+    }
   }
 
   return (
@@ -1157,7 +1330,7 @@ ${formatImageExportDetails(item)}
                 w={{ base: "full", md: "auto" }}
                 size={{ base: "md", md: "md" }}
               >
-                Export Combined Report
+                Export PDF Report
               </Button>
             )}
           </HStack>
