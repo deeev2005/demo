@@ -31,6 +31,7 @@ import {
 } from '@chakra-ui/react'
 import { FiCheckCircle, FiXCircle, FiImage, FiVideo, FiDownload, FiMonitor, FiCamera, FiClock, FiInfo } from 'react-icons/fi'
 import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 
 // Sand clock animation
 const sandClockRotate = keyframes`
@@ -449,6 +450,13 @@ const ClaimReport = ({ data, onReset }) => {
 
   const handleExport = async () => {
     try {
+      toast({
+        title: 'Generating PDF...',
+        description: 'Please wait while we capture the report',
+        status: 'info',
+        duration: 2000,
+      })
+
       const pdf = new jsPDF('p', 'mm', 'a4')
       let yPos = 20
       const pageHeight = pdf.internal.pageSize.height
@@ -466,19 +474,20 @@ const ClaimReport = ({ data, onReset }) => {
         return false
       }
 
-      // Helper function to convert image URL to base64
-      const getBase64FromUrl = async (url) => {
+      // Helper function to convert DOM element to image
+      const captureElement = async (element) => {
+        if (!element) return null
         try {
-          const response = await fetch(url)
-          const blob = await response.blob()
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onloadend = () => resolve(reader.result)
-            reader.onerror = reject
-            reader.readAsDataURL(blob)
+          const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: '#ffffff'
           })
+          return canvas.toDataURL('image/jpeg', 0.95)
         } catch (error) {
-          console.error('Error converting image:', error)
+          console.error('Error capturing element:', error)
           return null
         }
       }
@@ -614,17 +623,17 @@ const ClaimReport = ({ data, onReset }) => {
             yPos += 6
           })
 
-          // Add image preview
-          const imagePreview = imagePreviewMap[item.filename]
-          if (imagePreview) {
+          // Capture image preview from DOM
+          const imageElement = document.querySelector(`img[alt="${item.filename}"]`)
+          if (imageElement) {
             checkPageBreak(60)
             yPos += 4
             try {
-              const base64Image = await getBase64FromUrl(imagePreview)
-              if (base64Image) {
+              const imageData = await captureElement(imageElement)
+              if (imageData) {
                 const imgWidth = 80
                 const imgHeight = 60
-                pdf.addImage(base64Image, 'JPEG', margin, yPos, imgWidth, imgHeight)
+                pdf.addImage(imageData, 'JPEG', margin, yPos, imgWidth, imgHeight)
                 yPos += imgHeight + 4
               }
             } catch (error) {
@@ -632,27 +641,30 @@ const ClaimReport = ({ data, onReset }) => {
             }
           }
 
-          // Add heatmap if available
+          // Capture heatmap from DOM if available
           if (failedLayer && failedLayer.heatmapUrl) {
-            checkPageBreak(60)
-            yPos += 4
-            pdf.setFont('helvetica', 'italic')
-            pdf.setFontSize(9)
-            pdf.text('AI Detection Heatmap:', margin, yPos)
-            yPos += 6
-            
-            try {
-              const base64Heatmap = await getBase64FromUrl(failedLayer.heatmapUrl)
-              if (base64Heatmap) {
-                const imgWidth = 80
-                const imgHeight = 60
-                pdf.addImage(base64Heatmap, 'JPEG', margin, yPos, imgWidth, imgHeight)
-                yPos += imgHeight + 4
+            const heatmapElement = document.querySelector(`img[src="${failedLayer.heatmapUrl}"]`)
+            if (heatmapElement) {
+              checkPageBreak(60)
+              yPos += 4
+              pdf.setFont('helvetica', 'italic')
+              pdf.setFontSize(9)
+              pdf.text('AI Detection Heatmap:', margin, yPos)
+              yPos += 6
+              
+              try {
+                const heatmapData = await captureElement(heatmapElement)
+                if (heatmapData) {
+                  const imgWidth = 80
+                  const imgHeight = 60
+                  pdf.addImage(heatmapData, 'JPEG', margin, yPos, imgWidth, imgHeight)
+                  yPos += imgHeight + 4
+                }
+              } catch (error) {
+                console.error('Error adding heatmap to PDF:', error)
               }
-            } catch (error) {
-              console.error('Error adding heatmap to PDF:', error)
+              pdf.setFontSize(10)
             }
-            pdf.setFontSize(10)
           }
 
           yPos += 6
