@@ -474,7 +474,7 @@ const ClaimReport = ({ data, onReset }) => {
         return false
       }
 
-      // Helper function to convert DOM element to image
+      // Helper function to convert DOM element to image using html2canvas
       const captureElement = async (element) => {
         if (!element) return null
         try {
@@ -624,7 +624,16 @@ const ClaimReport = ({ data, onReset }) => {
           })
 
           // Capture image preview from DOM
-          const imageElement = document.querySelector(`img[alt="${item.filename}"]`)
+          const allImages = document.querySelectorAll('img')
+          let imageElement = null
+          
+          for (let img of allImages) {
+            if (img.alt === item.filename || img.src === imagePreviewMap[item.filename]) {
+              imageElement = img
+              break
+            }
+          }
+          
           if (imageElement) {
             checkPageBreak(60)
             yPos += 4
@@ -643,7 +652,16 @@ const ClaimReport = ({ data, onReset }) => {
 
           // Capture heatmap from DOM if available
           if (failedLayer && failedLayer.heatmapUrl) {
-            const heatmapElement = document.querySelector(`img[src="${failedLayer.heatmapUrl}"]`)
+            const allHeatmaps = document.querySelectorAll('img')
+            let heatmapElement = null
+            
+            for (let img of allHeatmaps) {
+              if (img.alt === 'AI Detection Heatmap' && img.src === failedLayer.heatmapUrl) {
+                heatmapElement = img
+                break
+              }
+            }
+            
             if (heatmapElement) {
               checkPageBreak(60)
               yPos += 4
@@ -653,16 +671,43 @@ const ClaimReport = ({ data, onReset }) => {
               yPos += 6
               
               try {
+                // Wait for image to fully load
+                await new Promise((resolve) => {
+                  if (heatmapElement.complete) {
+                    resolve()
+                  } else {
+                    heatmapElement.onload = resolve
+                    heatmapElement.onerror = resolve
+                    setTimeout(resolve, 3000) // Timeout after 3 seconds
+                  }
+                })
+                
                 const heatmapData = await captureElement(heatmapElement)
                 if (heatmapData) {
                   const imgWidth = 80
                   const imgHeight = 60
                   pdf.addImage(heatmapData, 'JPEG', margin, yPos, imgWidth, imgHeight)
                   yPos += imgHeight + 4
+                } else {
+                  pdf.setFont('helvetica', 'normal')
+                  pdf.text('   Heatmap could not be captured', margin, yPos)
+                  yPos += 6
                 }
               } catch (error) {
                 console.error('Error adding heatmap to PDF:', error)
+                pdf.setFont('helvetica', 'normal')
+                pdf.text('   Heatmap could not be captured', margin, yPos)
+                yPos += 6
               }
+              pdf.setFontSize(10)
+            } else {
+              // Heatmap element not found in DOM
+              checkPageBreak(10)
+              yPos += 4
+              pdf.setFont('helvetica', 'italic')
+              pdf.setFontSize(9)
+              pdf.text('AI Detection Heatmap: Not visible in current view', margin, yPos)
+              yPos += 6
               pdf.setFontSize(10)
             }
           }
@@ -1250,6 +1295,7 @@ const ClaimReport = ({ data, onReset }) => {
                                                   borderColor="gray.300"
                                                   objectFit="contain"
                                                   maxH="300px"
+                                                  crossOrigin="anonymous"
                                                   fallback={
                                                     <Box 
                                                       width="100%" 
