@@ -480,16 +480,16 @@ const ClaimReport = ({ data, onReset }) => {
               reader.readAsDataURL(blob)
             })
           }
-          // For external URLs (like heatmaps from DigitalOcean), fetch and convert to base64
+          // For external URLs (like heatmaps from DigitalOcean), use backend proxy
           else if (url && url.startsWith('http')) {
             try {
-              const response = await fetch(url, {
-                mode: 'cors',
-                credentials: 'omit'
-              })
+              const IMAGE_API_URL = import.meta.env.VITE_IMAGE_API_URL || 'http://localhost:5000'
+              const proxyUrl = `${IMAGE_API_URL}/api/proxy-image?url=${encodeURIComponent(url)}`
+              
+              const response = await fetch(proxyUrl)
               
               if (!response.ok) {
-                console.error('Failed to fetch heatmap:', response.status)
+                console.error('Failed to fetch heatmap via proxy:', response.status)
                 return null
               }
               
@@ -501,7 +501,7 @@ const ClaimReport = ({ data, onReset }) => {
                 reader.readAsDataURL(blob)
               })
             } catch (fetchError) {
-              console.error('Error fetching external image:', fetchError)
+              console.error('Error fetching external image via proxy:', fetchError)
               return null
             }
           }
