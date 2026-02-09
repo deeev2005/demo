@@ -480,10 +480,30 @@ const ClaimReport = ({ data, onReset }) => {
               reader.readAsDataURL(blob)
             })
           }
-          // For external URLs (like heatmaps from DigitalOcean), just return the URL
-          // jsPDF can handle external URLs directly
+          // For external URLs (like heatmaps from DigitalOcean), fetch and convert to base64
           else if (url && url.startsWith('http')) {
-            return url
+            try {
+              const response = await fetch(url, {
+                mode: 'cors',
+                credentials: 'omit'
+              })
+              
+              if (!response.ok) {
+                console.error('Failed to fetch heatmap:', response.status)
+                return null
+              }
+              
+              const blob = await response.blob()
+              return new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onloadend = () => resolve(reader.result)
+                reader.onerror = reject
+                reader.readAsDataURL(blob)
+              })
+            } catch (fetchError) {
+              console.error('Error fetching external image:', fetchError)
+              return null
+            }
           }
           
           return null
@@ -656,7 +676,7 @@ const ClaimReport = ({ data, onReset }) => {
               if (heatmapImage) {
                 const imgWidth = 80
                 const imgHeight = 60
-                pdf.addImage(heatmapImage, 'PNG', margin, yPos, imgWidth, imgHeight)
+                pdf.addImage(heatmapImage, 'JPEG', margin, yPos, imgWidth, imgHeight)
                 yPos += imgHeight + 4
               }
             } catch (error) {
