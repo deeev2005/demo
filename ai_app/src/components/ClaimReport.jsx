@@ -470,19 +470,23 @@ const ClaimReport = ({ data, onReset }) => {
       // Helper function to convert image URL to base64
       const getBase64FromUrl = async (url) => {
         try {
-          // If it's a heatmap URL from backend, fetch with auth token
+          const token = localStorage.getItem('authToken')
+          
+          // Handle heatmap URLs from backend
           if (url && url.includes('/heatmaps/')) {
-            const token = localStorage.getItem('authToken')
             const fullUrl = url.startsWith('http') ? url : `${IMAGE_API_URL}${url}`
+            
+            console.log('Fetching heatmap from:', fullUrl)
             
             const response = await fetch(fullUrl, {
               headers: token ? {
                 'Authorization': `Bearer ${token}`
-              } : {}
+              } : {},
+              mode: 'cors'
             })
             
             if (!response.ok) {
-              console.error('Failed to fetch heatmap:', response.status)
+              console.error('Failed to fetch heatmap:', response.status, response.statusText)
               return null
             }
             
@@ -493,8 +497,9 @@ const ClaimReport = ({ data, onReset }) => {
               reader.onerror = reject
               reader.readAsDataURL(blob)
             })
-          } else if (url) {
-            // For other URLs (like image previews)
+          } 
+          // Handle image previews (blob URLs)
+          else if (url && url.startsWith('blob:')) {
             const response = await fetch(url)
             const blob = await response.blob()
             return new Promise((resolve, reject) => {
@@ -504,9 +509,21 @@ const ClaimReport = ({ data, onReset }) => {
               reader.readAsDataURL(blob)
             })
           }
+          // Handle other URLs
+          else if (url) {
+            const response = await fetch(url)
+            const blob = await response.blob()
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result)
+              reader.onerror = reject
+              reader.readAsDataURL(blob)
+            })
+          }
+          
           return null
         } catch (error) {
-          console.error('Error converting image:', error)
+          console.error('Error converting image to base64:', error)
           return null
         }
       }
