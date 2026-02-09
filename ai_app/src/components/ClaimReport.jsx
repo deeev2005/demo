@@ -455,7 +455,6 @@ const ClaimReport = ({ data, onReset }) => {
       const pageWidth = pdf.internal.pageSize.width
       const margin = 15
       const maxWidth = pageWidth - 2 * margin
-      const IMAGE_API_URL = import.meta.env.VITE_IMAGE_API_URL || 'http://localhost:5000'
 
       // Helper function to check if we need a new page
       const checkPageBreak = (requiredSpace) => {
@@ -470,36 +469,8 @@ const ClaimReport = ({ data, onReset }) => {
       // Helper function to convert image URL to base64
       const getBase64FromUrl = async (url) => {
         try {
-          const token = localStorage.getItem('authToken')
-          
-          // Handle heatmap URLs from backend
-          if (url && url.includes('/heatmaps/')) {
-            const fullUrl = url.startsWith('http') ? url : `${IMAGE_API_URL}${url}`
-            
-            console.log('Fetching heatmap from:', fullUrl)
-            
-            const response = await fetch(fullUrl, {
-              headers: token ? {
-                'Authorization': `Bearer ${token}`
-              } : {},
-              mode: 'cors'
-            })
-            
-            if (!response.ok) {
-              console.error('Failed to fetch heatmap:', response.status, response.statusText)
-              return null
-            }
-            
-            const blob = await response.blob()
-            return new Promise((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onloadend = () => resolve(reader.result)
-              reader.onerror = reject
-              reader.readAsDataURL(blob)
-            })
-          } 
           // Handle image previews (blob URLs)
-          else if (url && url.startsWith('blob:')) {
+          if (url && url.startsWith('blob:')) {
             const response = await fetch(url)
             const blob = await response.blob()
             return new Promise((resolve, reject) => {
@@ -509,16 +480,10 @@ const ClaimReport = ({ data, onReset }) => {
               reader.readAsDataURL(blob)
             })
           }
-          // Handle other URLs
-          else if (url) {
-            const response = await fetch(url)
-            const blob = await response.blob()
-            return new Promise((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onloadend = () => resolve(reader.result)
-              reader.onerror = reject
-              reader.readAsDataURL(blob)
-            })
+          // For external URLs (like heatmaps from DigitalOcean), just return the URL
+          // jsPDF can handle external URLs directly
+          else if (url && url.startsWith('http')) {
+            return url
           }
           
           return null
@@ -687,11 +652,11 @@ const ClaimReport = ({ data, onReset }) => {
             yPos += 6
             
             try {
-              const base64Heatmap = await getBase64FromUrl(failedLayer.heatmapUrl)
-              if (base64Heatmap) {
+              const heatmapImage = await getBase64FromUrl(failedLayer.heatmapUrl)
+              if (heatmapImage) {
                 const imgWidth = 80
                 const imgHeight = 60
-                pdf.addImage(base64Heatmap, 'PNG', margin, yPos, imgWidth, imgHeight)
+                pdf.addImage(heatmapImage, 'PNG', margin, yPos, imgWidth, imgHeight)
                 yPos += imgHeight + 4
               }
             } catch (error) {
