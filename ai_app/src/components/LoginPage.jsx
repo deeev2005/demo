@@ -95,7 +95,7 @@ const LoginPage = ({ onLogin }) => {
             </Box>
             <Box>
               <Heading size="md" color="gray.900">
-                Authentic AI
+                Demo Platform 
               </Heading>
               <Text fontSize="xs" color="gray.600">
                 AI-Powered Authenticity Analysis
@@ -125,7 +125,7 @@ const LoginPage = ({ onLogin }) => {
                   Welcome Back
                 </Heading>
                 <Text color="gray.600" fontSize="sm">
-                  Sign in to access your Authentic AI Demo dashboard
+                  Sign in to access your  Demo dashboard
                 </Text>
               </Box>
 
@@ -210,7 +210,7 @@ const LoginPage = ({ onLogin }) => {
               Secure access 
             </Text>
             <Text fontSize="xs" color="gray.400" mt={1}>
-              © 2026 Authentic AI All rights reserved.
+              © 2026  All rights reserved.
             </Text>
           </Box>
         </VStack>
