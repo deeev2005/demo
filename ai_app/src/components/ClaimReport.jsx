@@ -32,19 +32,26 @@ import {
 import { FiCheckCircle, FiXCircle, FiImage, FiVideo, FiDownload, FiMonitor, FiCamera, FiClock, FiInfo } from 'react-icons/fi'
 import jsPDF from 'jspdf'
 
-// Sand clock animation
-const sandClockRotate = keyframes`
-  0% { transform: rotate(0deg); }
-  50% { transform: rotate(180deg); }
-  100% { transform: rotate(360deg); }
+// Sand clock flip animation
+const sandClockFlip = keyframes`
+  0%, 45% { 
+    transform: rotate(0deg);
+  }
+  50%, 95% { 
+    transform: rotate(180deg);
+  }
+  100% { 
+    transform: rotate(360deg);
+  }
 `
 
 const SandClockIcon = () => (
   <Box
-    animation={`${sandClockRotate} 2s linear infinite`}
+    animation={`${sandClockFlip} 2s ease-in-out infinite`}
     display="inline-block"
+    fontSize="40px"
   >
-    <Icon as={FiClock} boxSize={10} color="blue.500" />
+    ⏳
   </Box>
 )
 
@@ -741,8 +748,8 @@ const ClaimReport = ({ data, onReset }) => {
 
             {isProcessing ? (
               <Box p={{ base: 4, md: 6 }} bg="blue.50" borderRadius="lg" textAlign="center" mb={4}>
-                <Icon as={FiClock} boxSize={{ base: 10, md: 12 }} color="blue.600" mb={3} />
-                <Text fontSize={{ base: "md", md: "lg" }} fontWeight="semibold" color="blue.900" mb={2}>
+                <SandClockIcon />
+                <Text fontSize={{ base: "md", md: "lg" }} fontWeight="semibold" color="blue.900" mb={2} mt={3}>
                   Processing Files...
                 </Text>
                 <Text fontSize={{ base: "xs", md: "sm" }} color="blue.700">
