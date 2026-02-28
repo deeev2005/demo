@@ -61,7 +61,7 @@ const LoginPage = ({ onLogin }) => {
           onLogin();
         }, 500);
       } else {
-        setError(data.error || 'Invalid email or password');
+        setError(data.error || 'Invalid Username or Password');
       }
     } catch (err) {
       setError('Connection failed. Please try again.');
@@ -142,11 +142,11 @@ const LoginPage = ({ onLogin }) => {
                 {/* Email Input */}
                 <FormControl isRequired>
                   <FormLabel fontSize="sm" fontWeight="medium" color="gray.700">
-                    Email Address
+                    Username
                   </FormLabel>
                   <Input
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="Enter your Username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onKeyPress={handleKeyPress}
